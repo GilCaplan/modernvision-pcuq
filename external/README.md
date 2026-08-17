@@ -30,8 +30,19 @@ image-domain baggage we don't touch. Note: the clone is ~300MB mostly due to bun
 data/checkpoints; if repo size ever matters, re-clone with sparse checkout of the
 `*.py` files only.
 
-## (planned) Noise2Score3D/ or score-denoise/
+## Noise2Score3D/
 
-The frozen point-cloud denoiser under study — vendored here once availability is
-verified (see [../docs/SOURCES.md](../docs/SOURCES.md)). Record exact commit and
-checkpoint hashes in SOURCES.md when added.
+Wei et al., ICCV 2025 — the frozen point-cloud denoiser under study. Upstream commit
+`fef67d75155f0ab75c6f64ce7fc24ae2689186de` (cloned 2026-08-17). No license file
+upstream (course research use). Pretrained weights: download separately from
+[Hugging Face](https://huggingface.co/bobby645/Noise2Score3D/tree/main) into
+`data/checkpoints/` (gitignored).
+
+```bash
+git clone --depth 1 https://github.com/Bobby645/Noise2Score3D external/Noise2Score3D
+```
+
+What we use: `models/KPconv.py` (the denoiser network), `test.py` (how they load the
+checkpoint and run single-step Tweedie inference — the pattern our
+`pcuq.denoisers.Noise2Score3DWrapper` follows). Their heavy deps (PyTorch3D, pykeops)
+stay confined to GPU-VM environments.

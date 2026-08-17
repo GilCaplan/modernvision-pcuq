@@ -30,8 +30,11 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 
 ## Phase 2 — Real denoiser integration
 
-- [ ] Obtain Noise2Score3D code + checkpoint (availability check — see
-      [SOURCES.md](SOURCES.md); fallback: ScoreDenoise). Vendor into `external/`
+- [x] Obtain Noise2Score3D code — verified & vendored at `external/Noise2Score3D/`
+      (ICCV 2025, pretrained weights on HF — see [SOURCES.md](SOURCES.md))
+- [ ] Download pretrained checkpoint from HF; get their model running on the GPU VM
+      (deps: PyTorch3D, pykeops — probably too heavy for the Mac; smoke path can keep
+      using the analytic denoiser)
 - [ ] `denoisers.py`: wrapper conforming to our `Denoiser` interface
       (`(B, N, 3) → (B, N, 3)`, frozen, `eval()`, no grad unless asked)
 - [ ] Ordering-preservation / permutation-equivariance test on the real denoiser
@@ -58,7 +61,6 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 
 ## Open questions (move to LOG.md when resolved)
 
-- Noise2Score3D public code/checkpoint availability — verify early (Phase 2 blocker).
 - Eigenvectors of the *full* 3N×3N Jacobian vs restricting to a region mask (the
   reference repo uses patch masks; our analog = subset of points).
 - Lanczos worth it over subspace iteration for k ≤ 5? (Probably not — decide by Phase 3.)

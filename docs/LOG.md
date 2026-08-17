@@ -15,6 +15,19 @@ Entry template:
 
 ---
 
+## 2026-08-17 — Noise2Score3D availability confirmed; Phase-2 blocker cleared
+**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**What:** Verified the primary denoiser exists publicly: official ICCV 2025 code at
+github.com/Bobby645/Noise2Score3D with pretrained weights on Hugging Face
+(bobby645/Noise2Score3D). Vendored at `external/Noise2Score3D/` (commit `fef67d7`).
+**Result:** KPConv-based, trained on ModelNet-40 — exact match to our proposal. Two
+caveats: no upstream license file (note in report), and heavy deps (PyTorch3D,
+pykeops, CUDA-era pins) → the real denoiser likely runs only on the GPU VM; Mac smoke
+runs keep the analytic denoiser. ScoreDenoise fallback no longer needed but stays
+documented in SOURCES.md.
+**Next:** Download checkpoint, stand up their env on the VM, then the
+ordering-preservation gate before trusting any spectra.
+
 ## 2026-08-17 — Phase 1 complete: toy pipeline validated, gate passes
 **Who:** Claude (with Rocky) · **Machine:** mac · **Config:** configs/local.yaml
 **What:** Implemented the full Phase-1 machinery: `ToyGaussian` prior with closed-form

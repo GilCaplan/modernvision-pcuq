@@ -24,10 +24,16 @@ license and what we use it for.)*
 
 ## Denoiser (frozen model under study)
 
-- **Noise2Score3D** — Tweedie-formula single-step point-cloud denoiser; our primary
-  target model. ⚠️ **TODO (Phase 2 blocker): verify public code + checkpoint
-  availability**; vendor into `external/` when obtained, record exact commit/checkpoint
-  hash here.
+- **Noise2Score3D** (Wei et al., ICCV 2025) — Tweedie-formula single-step point-cloud
+  denoiser; our primary target model. ✅ Availability verified 2026-08-17:
+  [arXiv:2503.09283](https://arxiv.org/pdf/2503.09283) ·
+  [code](https://github.com/Bobby645/Noise2Score3D) (vendored at
+  `external/Noise2Score3D/`, commit `fef67d75155f0ab75c6f64ce7fc24ae2689186de`) ·
+  [pretrained weights on Hugging Face](https://huggingface.co/bobby645/Noise2Score3D/tree/main).
+  KPConv-based architecture; trained on ModelNet-40 (same split as TotalDenoising).
+  ⚠️ Repo has **no license file** — fine for course research use, but note it in the
+  report. ⚠️ Deps are heavy (PyTorch3D, pykeops, CUDA) — likely GPU-VM only; the Mac
+  smoke path may need the analytic/toy denoiser or CPU-compatible subset.
 - **Fallback: ScoreDenoise** (Luo & Hu, "Score-Based Point Cloud Denoising", ICCV 2021)
   — score-based, public pretrained checkpoints:
   [github.com/luost26/score-denoise](https://github.com/luost26/score-denoise).
