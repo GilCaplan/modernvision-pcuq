@@ -1,0 +1,19 @@
+# scratch / artifacts
+outputs/
+data/
+*.pt
+*.pth
+
+# vendored clones — re-cloned per external/README.md, not tracked here
+external/GaussianDenoisingPosterior/
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# os / editors
+.DS_Store
+.vscode/
+.idea/

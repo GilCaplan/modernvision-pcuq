@@ -1,0 +1,9 @@
+# Our code's deps only — vendored repos under external/ keep their own requirements.
+torch>=2.1
+numpy
+pyyaml
+tqdm
+matplotlib
+plotly
+trimesh
+pytest
