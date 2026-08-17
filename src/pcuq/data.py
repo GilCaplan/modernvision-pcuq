@@ -1,13 +1,18 @@
 """Datasets and corruption.
 
-Phase 1: synthetic Gaussian toy data with closed-form posterior (below).
-Phase 2 (TODO): load_modelnet(cfg) — ModelNet40 download/cache, mesh -> n_points
-sampling via trimesh, unit-sphere normalization. Variant recorded in docs/SOURCES.md.
+- Toy: synthetic Gaussian prior with closed-form posterior (ground truth for tests).
+- Real: ModelNet40 — official zip cached under data/, OFF meshes parsed and sampled
+  in pure torch (no trimesh; ModelNet OFF files are often malformed, see _parse_off),
+  normalized to the unit sphere, seeded sampling with retained indices.
 """
 
 import math
+import zipfile
+from pathlib import Path
 
 import torch
+
+MODELNET40_URL = "https://modelnet.cs.princeton.edu/ModelNet40.zip"
 
 
 def corrupt(x: torch.Tensor, sigma: float, seed: int) -> torch.Tensor:
@@ -54,6 +59,98 @@ class ToyGaussian:
         vals, idx = post.sort(descending=True, stable=True)
         vecs = self.U[:, idx[:k]].T.reshape(k, *self.mu.shape)
         return vecs, vals[:k]
+
+
+def _parse_off(text: str):
+    """Parse an OFF mesh -> (verts (V, 3) float64, faces (F, 3) long).
+
+    Tolerates ModelNet40's malformed headers ("OFF490 240 0" glued on one line)
+    and fan-triangulates faces with more than 3 vertices.
+    """
+    lines = [ln for ln in (raw.split("#")[0].strip() for raw in text.splitlines()) if ln]
+    if lines[0] == "OFF":
+        counts, body = lines[1], lines[2:]
+    elif lines[0].startswith("OFF"):
+        counts, body = lines[0][3:], lines[1:]
+    else:
+        raise ValueError("not an OFF file")
+    n_verts, n_faces = (int(t) for t in counts.split()[:2])
+
+    verts = torch.tensor([[float(t) for t in ln.split()[:3]] for ln in body[:n_verts]],
+                         dtype=torch.float64)
+    faces = []
+    for ln in body[n_verts:n_verts + n_faces]:
+        idx = [int(t) for t in ln.split()]
+        for j in range(1, idx[0] - 1):  # idx[0] = vertex count of this face
+            faces.append([idx[1], idx[1 + j], idx[2 + j]])
+    return verts, torch.tensor(faces, dtype=torch.long)
+
+
+def sample_mesh(verts: torch.Tensor, faces: torch.Tensor, n_points: int,
+                seed: int) -> torch.Tensor:
+    """Area-weighted uniform surface sampling -> (n_points, 3), deterministic."""
+    a, b, c = (verts[faces[:, i]] for i in range(3))
+    areas = torch.linalg.cross(b - a, c - a).norm(dim=1)
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    pick = torch.multinomial(areas.clamp(min=1e-12), n_points, replacement=True,
+                             generator=gen)
+    uv = torch.rand(n_points, 2, generator=gen, dtype=verts.dtype)
+    flip = uv.sum(dim=1) > 1  # reflect into the triangle
+    uv[flip] = 1 - uv[flip]
+    return (a[pick] + uv[:, :1] * (b - a)[pick] + uv[:, 1:] * (c - a)[pick])
+
+
+def normalize_unit_sphere(points: torch.Tensor):
+    """Center on the centroid, scale the farthest point to radius 1 — the frame
+    Noise2Score3D was trained in. Returns (points, center, scale)."""
+    center = points.mean(dim=0, keepdim=True)
+    points = points - center
+    scale = points.norm(dim=1).max()
+    return points / scale, center, scale
+
+
+def load_modelnet(cfg: dict, dtype: torch.dtype = torch.float32):
+    """ModelNet40 test-split shapes -> list of (name, points (n_points, 3)).
+
+    Downloads the official zip (~2GB, one-time) into data.root and reads OFF files
+    straight out of it (no extraction). Takes data.n_shapes shapes round-robin
+    across data.categories; sampling is seeded per shape.
+    """
+    d = cfg["data"]
+    root = Path(d["root"])
+    root.mkdir(parents=True, exist_ok=True)
+    zip_path = root / "ModelNet40.zip"
+    if not zip_path.exists():
+        print(f"Downloading ModelNet40 (~2GB, one-time) to {zip_path} ...")
+        torch.hub.download_url_to_file(MODELNET40_URL, str(zip_path))
+
+    zf = zipfile.ZipFile(zip_path)
+    per_cat = {cat: sorted(n for n in zf.namelist()
+                           if n.startswith(f"ModelNet40/{cat}/test/") and n.endswith(".off"))
+               for cat in d["categories"]}
+    for cat, names in per_cat.items():
+        if not names:
+            raise ValueError(f"no test shapes found for category '{cat}'")
+    total = sum(len(v) for v in per_cat.values())
+    if d["n_shapes"] > total:
+        raise ValueError(f"n_shapes={d['n_shapes']} > {total} available test shapes")
+
+    shapes = []
+    rank = 0
+    while len(shapes) < d["n_shapes"]:
+        for cat in d["categories"]:
+            if len(shapes) >= d["n_shapes"]:
+                break
+            names = per_cat[cat]
+            if rank >= len(names):
+                continue
+            member = names[rank]
+            verts, faces = _parse_off(zf.read(member).decode())
+            pts = sample_mesh(verts, faces, d["n_points"], seed=cfg["seed"] + len(shapes))
+            pts, _, _ = normalize_unit_sphere(pts)
+            shapes.append((Path(member).stem, pts.to(dtype)))
+        rank += 1
+    return shapes
 
 
 def make_toy_gaussian(n_points: int, seed: int, dtype: torch.dtype = torch.float32,

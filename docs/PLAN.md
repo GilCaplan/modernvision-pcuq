@@ -28,7 +28,7 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 - [x] **Gate:** `scripts/sanity_gaussian.py --config configs/local.yaml` passes on the
       Mac (2026-08-17: PASS, rel err ≤0.3%, |cos| ≥0.995 — see LOG.md)
 
-## Phase 2 — Real denoiser integration
+## Phase 2 — Real denoiser integration ✅
 
 - [x] Obtain Noise2Score3D code — verified & vendored at `external/Noise2Score3D/`
       (ICCV 2025, pretrained weights on HF — see [SOURCES.md](SOURCES.md))
@@ -39,12 +39,18 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
       (`(B, N, 3) → (B, N, 3)`, frozen, Tweedie step `y + σ²·score(y)`)
 - [x] Ordering-preservation / permutation-equivariance test on the real denoiser —
       **hard gate PASSED**: relative error 2e-8 under random permutation
-- [ ] `data.py`: ModelNet40 download/loading, mesh → N-point sampling, normalization,
-      seeded corruption with retained indices
+- [x] `data.py`: ModelNet40 loading — official zip auto-download (~2GB, one-time),
+      pure-torch OFF parsing + area-weighted sampling (handles ModelNet's malformed
+      headers), unit-sphere normalization, seeded. Logic unit-tested without the
+      download; first live run happens on the VM
 - [x] **Gate:** tiny end-to-end run on the Mac — `check_denoiser.py` PASS @ N=2048
       (denoising improves MSE, spectrum extracted; sphere shape — ModelNet still open)
 
-## Phase 3 — Full experiments (GPU VM)
+## Phase 3 — Full experiments (GPU VM) — **ready to start**
+
+`run_experiment.py` is fully implemented (shapes × σ loop, spectrum, diagnostics,
+mode figures, metrics.json); VM setup is a copy-paste block in
+[WORKFLOW.md](WORKFLOW.md). Smoke-verified on the Mac for both denoiser kinds.
 
 - [ ] Step-size sweep + finite-diff vs autograd validation at full N (`configs/gpu.yaml`)
 - [ ] Top 3–5 eigenpairs across shape categories and noise levels σ
@@ -69,6 +75,9 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 - Estimated top eigenvalues on the real model came out ~1.5σ² (an exact MMSE denoiser
   bounds them by σ²) — finite-diff noise, or the model is locally expansive?
   Investigate with a c-sweep and across shapes/σ.
+- On far-out-of-distribution input (toy Gaussian blob) the real model's top
+  |eigenvalues| are *negative* — non-PSD exactly as the proposal warned. Check
+  whether this persists on in-distribution ModelNet shapes (Phase 3).
 - Eigenvectors of the *full* 3N×3N Jacobian vs restricting to a region mask (the
   reference repo uses patch masks; our analog = subset of points).
 - Lanczos worth it over subspace iteration for k ≤ 5? (Probably not — decide by Phase 3.)

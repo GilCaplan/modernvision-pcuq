@@ -38,12 +38,12 @@ data/checkpoints; if repo size ever matters, re-clone with sparse checkout of th
 
 Wei et al., ICCV 2025 — the frozen point-cloud denoiser under study. Upstream commit
 `fef67d75155f0ab75c6f64ce7fc24ae2689186de` (cloned 2026-08-17). No license file
-upstream (course research use). Pretrained weights: download separately from
-[Hugging Face](https://huggingface.co/bobby645/Noise2Score3D/tree/main) into
-`data/checkpoints/` (gitignored).
+upstream (course research use).
 
 ```bash
 git clone --depth 1 https://github.com/Bobby645/Noise2Score3D external/Noise2Score3D
+mkdir -p data/checkpoints && curl -sL -o data/checkpoints/noise2score3d_step4500.pth \
+  "https://huggingface.co/bobby645/Noise2Score3D/resolve/main/model_step_4500.pth"
 ```
 
 What we use: `models/KPconv.py` (the denoiser network), `test.py` (how they load the

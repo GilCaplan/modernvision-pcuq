@@ -15,6 +15,23 @@ Entry template:
 
 ---
 
+## 2026-08-17 — GPU-ready: ModelNet40 loader, full run_experiment pipeline, VM runbook
+**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** configs/local.yaml
+**What:** Closed the gaps between "gates pass" and "VM can run the real experiment":
+ModelNet40 loader (official zip, pure-torch OFF parse + area-weighted sampling —
+dropped the trimesh dep), fully implemented `run_experiment.py` (shapes × σ, spectrum,
+per-σ diagnostics incl. new autograd-free step-size sweep, mode figures, incremental
+metrics.json), matplotlib viz, VM setup runbook in WORKFLOW.md. requirements.txt alone
+now suffices on the VM (no pykeops/pytorch3d).
+**Result:** 13 tests pass. Local runs of `run_experiment.py`: analytic+toy PASS (19s,
+MPS, eigval overlap 0.9999); real-model smoke PASS mechanically (CPU). Smoke caught and
+fixed a real bug: coarse pyramid levels with fewer support points than neighbor_limit
+broke the kNN shim (now inf-padded = "no neighbor"). Finding: on the OOD toy blob the
+real model's top |eigvals| are *negative* (non-PSD, as the proposal warned) — logged as
+an open question to re-check on in-distribution ModelNet shapes.
+**Next:** On the VM: WORKFLOW.md runbook top to bottom; first `gpu.yaml` run downloads
+ModelNet40 (~2GB). Expect ~10s/(shape·σ) on CPU-scale timing — much less on GPU.
+
 ## 2026-08-17 — Phase 2 (nearly) done: real denoiser runs ON THE MAC; equivariance gate passed
 **Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** configs/local.yaml
 **What:** Wrote `Noise2Score3DWrapper` + `scripts/check_denoiser.py`. Made the vendored

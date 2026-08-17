@@ -44,6 +44,20 @@ def sweep_step_size(denoiser: Denoiser, y: torch.Tensor, cs: list[float],
             for c in cs}
 
 
+def sweep_step_size_fd(denoiser: Denoiser, y: torch.Tensor, cs: list[float],
+                       method: str = "central", seed: int = 0) -> dict[float, float]:
+    """Autograd-free variant for models torch.func can't trace (Noise2Score3D):
+    self-consistency error ||J_c v - J_{c/2} v|| / ||J_{c/2} v|| per step size c.
+    Small on the plateau where the finite difference is trustworthy."""
+    v = _unit_probes(y, 1, seed)
+    out = {}
+    for c in cs:
+        g = jvp(denoiser, y, v, method=method, c=c)
+        g_half = jvp(denoiser, y, v, method=method, c=c / 2)
+        out[float(c)] = float((g - g_half).norm() / g_half.norm())
+    return out
+
+
 def antisym_energy(denoiser: Denoiser, y: torch.Tensor, n_probes: int = 5,
                    seed: int = 0) -> float:
     """How asymmetric is J? mean ||(J - J^T)v|| / ||(J + J^T)v|| over random probes.

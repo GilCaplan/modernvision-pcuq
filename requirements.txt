@@ -1,9 +1,9 @@
-# Our code's deps only — vendored repos under external/ keep their own requirements.
+# Our code's deps only. This is ALSO sufficient for running the vendored
+# Noise2Score3D at inference: pcuq.denoisers shims its pykeops/CUDA-only bits
+# (see external/README.md), so no pytorch3d/pykeops needed anywhere.
 torch>=2.1
 numpy
 pyyaml
 tqdm
 matplotlib
-plotly
-trimesh
 pytest
