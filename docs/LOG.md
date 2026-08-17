@@ -15,6 +15,23 @@ Entry template:
 
 ---
 
+## 2026-08-17 — Phase 2 (nearly) done: real denoiser runs ON THE MAC; equivariance gate passed
+**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** configs/local.yaml
+**What:** Wrote `Noise2Score3DWrapper` + `scripts/check_denoiser.py`. Made the vendored
+model run without CUDA/pykeops via runtime shims (no vendored files edited): no-op
+`.cuda()` when CUDA is absent; swap their pykeops kNN for exact `cdist`+`topk`; their
+`dataloader()`'s hardcoded `.cuda()` replaced device-safely; checkpoint loaded with
+`strict=False` guarded to allow only the zero-init conv biases the checkpoint lacks.
+**Result (N=2048, σ=0.02, sphere):** forward 0.2s CPU; **equivariance 1.7e-8 — the
+proposal's hard gate PASSED**; denoising improves MSE 4.02e-4 → 3.32e-4; 2-eigvec
+spectrum in ~6s (finite differences). At N=256 denoising *hurt* MSE — the model needs
+training-like density (trained on 10k–50k-pt ModelNet), hence local n_points now 2048.
+Two surprises → PLAN.md open questions: `torch.func` autograd cannot trace their graph
+ops (finite differences only — sweep needs an autograd-free reference), and estimated
+eigenvalues ~1.5σ² exceed the MMSE bound σ². Sanity gate re-verified at N=2048 (PASS,
+15s, MPS).
+**Next:** ModelNet40 loading (last open Phase-2 item), then Phase-3 sweeps on the VM.
+
 ## 2026-08-17 — Noise2Score3D availability confirmed; Phase-2 blocker cleared
 **Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
 **What:** Verified the primary denoiser exists publicly: official ICCV 2025 code at

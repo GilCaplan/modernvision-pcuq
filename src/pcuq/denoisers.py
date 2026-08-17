@@ -2,11 +2,13 @@
 
 Contract: denoise(y) maps (B, N, 3) -> (B, N, 3), model frozen, point ordering
 preserved (verified by diagnostics.check_equivariance before trusting a real model).
-
-Phase 2 (TODO): Noise2Score3DWrapper around the vendored pretrained model
-(cf. external/GaussianDenoisingPosterior/models_wrappers/models_wrapper_base.py for
-the wrapper pattern). Fallback: ScoreDenoise — see docs/SOURCES.md.
 """
+
+import contextlib
+import importlib.util
+import sys
+import types
+from pathlib import Path
 
 import torch
 
@@ -44,3 +46,95 @@ class AnalyticGaussianDenoiser(Denoiser):
     def denoise(self, y: torch.Tensor) -> torch.Tensor:
         yf = y.reshape(y.shape[0], -1)
         return (self.mu_flat + (yf - self.mu_flat) @ self.A.T).reshape(y.shape)
+
+
+@contextlib.contextmanager
+def _cuda_calls_noop_without_cuda():
+    """The vendored Noise2Score3D code hardcodes .cuda() in layer constructors and
+    helpers. Inside this context, Tensor.cuda() is a no-op when CUDA is unavailable
+    (Mac), and untouched when it is (GPU VM) — the vendored files stay unedited."""
+    if torch.cuda.is_available():
+        yield
+        return
+    orig = torch.Tensor.cuda
+    torch.Tensor.cuda = lambda self, *a, **k: self
+    try:
+        yield
+    finally:
+        torch.Tensor.cuda = orig
+
+
+def _torch_knn(q_points, s_points, k):
+    """Exact pure-torch replacement for their pykeops keops_knn: k smallest
+    euclidean distances, ascending — identical semantics at our scales (N <= ~2k),
+    used only when pykeops isn't installed (Mac). (*, N, C), (*, M, C) -> (*, N, k)."""
+    dists = torch.cdist(q_points, s_points)
+    return dists.topk(k, dim=-1, largest=False)
+
+
+def _shim_pykeops_if_missing() -> bool:
+    """Their knn.py imports pykeops at module level. If pykeops isn't installed,
+    register an empty stand-in so the import succeeds; the caller must then swap
+    keops_knn for _torch_knn. Returns True if the shim was applied."""
+    if importlib.util.find_spec("pykeops") is not None:
+        return False
+    if "pykeops" not in sys.modules:
+        pk = types.ModuleType("pykeops")
+        pk_torch = types.ModuleType("pykeops.torch")
+        pk_torch.LazyTensor = None  # imported by name, unused once keops_knn is swapped
+        pk.torch = pk_torch
+        sys.modules["pykeops"] = pk
+        sys.modules["pykeops.torch"] = pk_torch
+    return True
+
+
+class Noise2Score3DWrapper(Denoiser):
+    """Frozen Noise2Score3D (Wei et al., ICCV 2025) from external/Noise2Score3D.
+
+    The network predicts the score s(y) of the noisy distribution; Tweedie gives the
+    posterior mean D(y) = y + sigma^2 * s(y) (their test.py inference, in the
+    normalized coordinate frame the model was trained in — pass clouds normalized to
+    roughly the unit sphere, and sigma in that same frame).
+    """
+
+    def __init__(self, repo_dir: str, checkpoint: str, sigma: float,
+                 device: torch.device):
+        repo = Path(repo_dir).resolve()
+        for p in (str(repo), str(repo / "models")):  # they import both
+            if p not in sys.path:                    # `models.easy_kpconv` and
+                sys.path.insert(0, p)                # `easy_kpconv` styles
+        with _cuda_calls_noop_without_cuda():
+            shimmed = _shim_pykeops_if_missing()
+            from models import KPconv_test as n2s3d
+            if shimmed:  # radius_search imports keops_knn by name — patch both
+                sys.modules["models.easy_kpconv.ops.knn"].keops_knn = _torch_knn
+                sys.modules["models.easy_kpconv.ops.radius_search"].keops_knn = _torch_knn
+            # Their dataloader() hardcodes .cuda() on a fresh tensor; rebuild the
+            # same dict with lengths on the input's device instead.
+            n2s3d.dataloader = lambda data: {
+                "points": data[0],
+                "lengths": torch.tensor([data.shape[1]], dtype=torch.int64,
+                                        device=data.device),
+                "batch_size": 1,
+            }
+            model = n2s3d.get_model(n2s3d.Config(), normal_channel=None)
+            state = torch.load(checkpoint, map_location="cpu")
+            # The HF checkpoint was trained with bias-free KPConv layers; this build
+            # adds conv biases, zero-initialized (= identical function). Allow only
+            # those keys to be missing, nothing else.
+            result = model.load_state_dict(state["model_state_dict"], strict=False)
+            assert not result.unexpected_keys, result.unexpected_keys
+            assert all(k.endswith("conv.bias") for k in result.missing_keys), \
+                result.missing_keys
+        self.model = model.to(device).eval()
+        for p in self.model.parameters():
+            p.requires_grad_(False)
+        self.sigma = sigma
+
+    def denoise(self, y: torch.Tensor) -> torch.Tensor:
+        outs = []
+        for cloud in y:  # their pack-mode path handles one cloud at a time
+            with _cuda_calls_noop_without_cuda():
+                score, _, _ = self.model(cloud[None], None)  # (N, 3)
+            outs.append(cloud + self.sigma**2 * score)
+        return torch.stack(outs)

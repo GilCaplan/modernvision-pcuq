@@ -17,6 +17,16 @@ def corrupt(x: torch.Tensor, sigma: float, seed: int) -> torch.Tensor:
     return x + sigma * z
 
 
+def fibonacci_sphere(n_points: int, radius: float = 1.0,
+                     dtype: torch.dtype = torch.float64) -> torch.Tensor:
+    """Deterministic near-uniform points on a sphere, (N, 3)."""
+    i = torch.arange(n_points, dtype=torch.float64)
+    phi = torch.acos(1 - 2 * (i + 0.5) / n_points)
+    theta = math.pi * (1 + 5**0.5) * i
+    p = torch.stack([phi.sin() * theta.cos(), phi.sin() * theta.sin(), phi.cos()], dim=1)
+    return (radius * p).to(dtype)
+
+
 class ToyGaussian:
     """Gaussian prior X ~ N(mu, C) over point clouds, C = U diag(lams) U^T known.
 
@@ -55,11 +65,7 @@ def make_toy_gaussian(n_points: int, seed: int, dtype: torch.dtype = torch.float
     lams straddle typical sigma^2 values — that's where posterior eigenvalues
     remain separated instead of all saturating at sigma^2).
     """
-    # Deterministic base shape: Fibonacci sphere, radius 0.5.
-    i = torch.arange(n_points, dtype=torch.float64)
-    phi = torch.acos(1 - 2 * (i + 0.5) / n_points)
-    theta = math.pi * (1 + 5**0.5) * i
-    mu = 0.5 * torch.stack([phi.sin() * theta.cos(), phi.sin() * theta.sin(), phi.cos()], dim=1)
+    mu = fibonacci_sphere(n_points, radius=0.5)
 
     d = 3 * n_points
     gen = torch.Generator(device="cpu").manual_seed(seed)
