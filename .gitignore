@@ -6,6 +6,7 @@ data/
 
 # vendored clones — re-cloned per external/README.md, not tracked here
 external/GaussianDenoisingPosterior/
+external/Noise2Score3D/
 
 # python
 __pycache__/
