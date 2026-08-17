@@ -32,17 +32,17 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 
 - [x] Obtain Noise2Score3D code — verified & vendored at `external/Noise2Score3D/`
       (ICCV 2025, pretrained weights on HF — see [SOURCES.md](SOURCES.md))
-- [ ] Download pretrained checkpoint from HF; get their model running on the GPU VM
-      (deps: PyTorch3D, pykeops — probably too heavy for the Mac; smoke path can keep
-      using the analytic denoiser)
-- [ ] `denoisers.py`: wrapper conforming to our `Denoiser` interface
-      (`(B, N, 3) → (B, N, 3)`, frozen, `eval()`, no grad unless asked)
-- [ ] Ordering-preservation / permutation-equivariance test on the real denoiser
-      (`diagnostics.py`) — **hard gate**: if ordering breaks, we need matching or a
-      different denoiser
+- [x] Download pretrained checkpoint from HF (`data/checkpoints/`, 293MB) — and it
+      runs on the Mac CPU (0.2s forward @ 2048 pts): their pykeops/CUDA deps turned
+      out to be shim-able (see LOG.md 2026-08-17 Phase-2 entry)
+- [x] `denoisers.py`: `Noise2Score3DWrapper` conforming to our `Denoiser` interface
+      (`(B, N, 3) → (B, N, 3)`, frozen, Tweedie step `y + σ²·score(y)`)
+- [x] Ordering-preservation / permutation-equivariance test on the real denoiser —
+      **hard gate PASSED**: relative error 2e-8 under random permutation
 - [ ] `data.py`: ModelNet40 download/loading, mesh → N-point sampling, normalization,
       seeded corruption with retained indices
-- [ ] **Gate:** tiny end-to-end run on the Mac (few shapes, N small, 1–2 eigenpairs)
+- [x] **Gate:** tiny end-to-end run on the Mac — `check_denoiser.py` PASS @ N=2048
+      (denoising improves MSE, spectrum extracted; sphere shape — ModelNet still open)
 
 ## Phase 3 — Full experiments (GPU VM)
 
@@ -61,6 +61,14 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 
 ## Open questions (move to LOG.md when resolved)
 
+- Autograd (`torch.func`) cannot trace their graph-pyramid ops → no exact-JVP
+  reference and no `Jᵀv` for the real model. Consequences: (a) step-size sweep needs
+  an autograd-free reference (Richardson / c-halving self-consistency); (b)
+  symmetrized operator unavailable — run plain `Jv` (the reference repo did the same)
+  and find another asymmetry probe.
+- Estimated top eigenvalues on the real model came out ~1.5σ² (an exact MMSE denoiser
+  bounds them by σ²) — finite-diff noise, or the model is locally expansive?
+  Investigate with a c-sweep and across shapes/σ.
 - Eigenvectors of the *full* 3N×3N Jacobian vs restricting to a region mask (the
   reference repo uses patch masks; our analog = subset of points).
 - Lanczos worth it over subspace iteration for k ≤ 5? (Probably not — decide by Phase 3.)

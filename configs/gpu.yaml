@@ -17,7 +17,8 @@ data:
 
 denoiser:
   kind: noise2score3d
-  checkpoint: data/checkpoints/noise2score3d.pt   # fix path once model is vendored
+  repo: external/Noise2Score3D
+  checkpoint: data/checkpoints/noise2score3d_step4500.pth
 
 jacobian:
   method: central

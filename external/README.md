@@ -1,8 +1,12 @@
 # external/ — vendored third-party code
 
-Rules: **read-only.** We never edit, import-and-monkeypatch, or mix our code in here.
-Anything we need in modified form is rewritten cleanly in `src/pcuq/` with a comment
-pointing back at the origin file. Each vendored repo keeps its own license.
+Rules: **read-only.** We never edit files in here or mix our code in. Anything we
+need in modified form is rewritten cleanly in `src/pcuq/` with a comment pointing
+back at the origin file. Narrow, documented *runtime* shims applied from `pcuq` are
+allowed when vendored code hardcodes an environment we don't have (e.g.
+`Noise2Score3DWrapper` no-ops `.cuda()` calls on CUDA-less machines and swaps their
+pykeops kNN for an exact torch equivalent when pykeops isn't installed) — the files
+on disk stay pristine. Each vendored repo keeps its own license.
 
 Vendored clones are **gitignored** (they're hundreds of MB); this README is the record
 of what to fetch. After a fresh checkout, restore with the clone commands below.

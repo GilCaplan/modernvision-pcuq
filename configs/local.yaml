@@ -11,13 +11,14 @@ data:
   dataset: toy_gaussian # toy_gaussian | modelnet40
   root: data
   n_shapes: 2
-  n_points: 256
+  n_points: 2048   # Noise2Score3D was trained on dense clouds; below ~2k it degrades
   sigmas: [0.02]
   categories: [chair]   # modelnet40 only
 
 denoiser:
   kind: analytic_gaussian   # analytic_gaussian | noise2score3d
-  checkpoint: null
+  repo: external/Noise2Score3D
+  checkpoint: data/checkpoints/noise2score3d_step4500.pth
 
 jacobian:
   method: central       # forward | central | autograd
