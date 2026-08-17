@@ -1,0 +1,35 @@
+# Smoke-test profile for the local Mac (CPU/MPS). Target: full pipeline ≲ 2 minutes.
+# Same schema as gpu.yaml — code never branches on which profile it got.
+
+name: local
+device: auto            # auto → cuda if available, else mps, else cpu
+seed: 0
+double_precision: false
+out_dir: outputs
+
+data:
+  dataset: toy_gaussian # toy_gaussian | modelnet40
+  root: data
+  n_shapes: 2
+  n_points: 256
+  sigmas: [0.02]
+  categories: [chair]   # modelnet40 only
+
+denoiser:
+  kind: analytic_gaussian   # analytic_gaussian | noise2score3d
+  checkpoint: null
+
+jacobian:
+  method: central       # forward | central | autograd
+  c: 1.0e-4             # perturbation step; sweep via diagnostics
+  batch_jvp: 2
+
+spectrum:
+  n_ev: 2
+  iters: 3
+  symmetrize: true
+
+diagnostics:
+  check_equivariance: true
+  step_size_sweep: [1.0e-2, 1.0e-3, 1.0e-4, 1.0e-5]
+  compare_autograd: true
