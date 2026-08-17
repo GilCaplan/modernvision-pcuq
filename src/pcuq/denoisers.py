@@ -67,9 +67,18 @@ def _cuda_calls_noop_without_cuda():
 def _torch_knn(q_points, s_points, k):
     """Exact pure-torch replacement for their pykeops keops_knn: k smallest
     euclidean distances, ascending — identical semantics at our scales (N <= ~2k),
-    used only when pykeops isn't installed (Mac). (*, N, C), (*, M, C) -> (*, N, k)."""
-    dists = torch.cdist(q_points, s_points)
-    return dists.topk(k, dim=-1, largest=False)
+    used only when pykeops isn't installed (Mac). (*, N, C), (*, M, C) -> (*, N, k).
+
+    When a coarse pyramid level has fewer support points than k, pad with
+    inf-distance / index-0 entries — their radius mask discards anything beyond
+    the search radius, so padding reads as "no neighbor"."""
+    m = s_points.shape[-2]
+    dists, idx = torch.cdist(q_points, s_points).topk(min(k, m), dim=-1, largest=False)
+    if m < k:
+        pad = (*dists.shape[:-1], k - m)
+        dists = torch.cat([dists, dists.new_full(pad, torch.inf)], dim=-1)
+        idx = torch.cat([idx, idx.new_zeros(pad)], dim=-1)
+    return dists, idx
 
 
 def _shim_pykeops_if_missing() -> bool:
