@@ -15,6 +15,20 @@ Entry template:
 
 ---
 
+## 2026-08-17 — Phase 1 complete: toy pipeline validated, gate passes
+**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** configs/local.yaml
+**What:** Implemented the full Phase-1 machinery: `ToyGaussian` prior with closed-form
+posterior, `AnalyticGaussianDenoiser`, JVPs (forward/central/autograd), subspace
+iteration with Rayleigh-quotient eigenvalues, and the diagnostics suite. 7 tests pass.
+**Result:** `sanity_gaussian.py` at local scale (N=256, k=2, 10 iters, MPS, float32):
+PASS in ~3.5s. Eigenvalue rel err 0.2–0.3%, eigenvector |cos| 0.995, antisym energy
+1e-7. Step-size sweep on float32 shows error *rising* as c shrinks (1e-2 → 3.6e-4 err;
+1e-5 → 0.36) — pure cancellation, since the toy denoiser is linear (no nonlinearity
+penalty at large c). Metrics: outputs/local/sanity_gaussian/metrics.json.
+**Next:** For *real* (nonlinear) denoisers the sweep will be U-shaped; expect the
+float32 cancellation floor to matter and double precision (CPU/CUDA only — MPS has no
+float64) to be needed for small c. Phase 2: verify Noise2Score3D availability.
+
 ## 2026-08-17 — Project scaffolded
 **Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
 **What:** Created the docs system, package skeleton, and scale-profile configs. Vendored

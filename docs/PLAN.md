@@ -9,21 +9,24 @@ with a local smoke run before anything touches the GPU VM; see [WORKFLOW.md](WOR
 - [x] Docs system (this folder)
 - [x] Package skeleton `src/pcuq`, configs, scripts
 
-## Phase 1 — Core machinery on a *toy* problem (Mac-only, no pretrained model)
+## Phase 1 — Core machinery on a *toy* problem (Mac-only, no pretrained model) ✅
 
 Goal: prove the whole pipeline end-to-end where the answer is known in closed form.
 
-- [ ] `data.py`: synthetic Gaussian / GMM point data with known posterior covariance
-- [ ] `denoisers.py`: `AnalyticGaussianDenoiser` — closed-form MMSE denoiser for a
+- [x] `data.py`: synthetic Gaussian point data with known posterior covariance
+      (`ToyGaussian`; GMM variant only if we later want non-Gaussian posteriors)
+- [x] `denoisers.py`: `AnalyticGaussianDenoiser` — closed-form MMSE denoiser for a
       Gaussian prior (posterior covariance known exactly → ground truth for eigenpairs)
-- [ ] `jacobian.py`: forward-diff, central-diff, and autograd (`torch.func.jvp`) JVPs
+- [x] `jacobian.py`: forward-diff, central-diff, and autograd (`torch.func.jvp`) JVPs
       behind one interface; symmetrized product `v ↦ ½(J+Jᵀ)v`
-- [ ] `spectrum.py`: block power iteration (port the idea from
-      `external/.../moments_calculations.py:get_eigvecs`, rewritten clean) + optional Lanczos
-- [ ] `diagnostics.py`: antisymmetric energy, PSD check, step-size (`c`) sweep, JVP
-      agreement (finite-diff vs autograd)
-- [ ] `tests/`: eigenpairs from power iteration match analytic covariance to tolerance
-- [ ] **Gate:** `scripts/sanity_gaussian.py --config configs/local.yaml` passes on the Mac
+- [x] `spectrum.py`: block power (subspace) iteration with QR + Rayleigh-quotient
+      eigenvalues (Lanczos deferred to the Phase-3 decision below)
+- [x] `diagnostics.py`: antisymmetric energy, PSD report, step-size (`c`) sweep vs
+      autograd, permutation-equivariance check
+- [x] `tests/`: eigenpairs from subspace iteration match analytic covariance (float64,
+      rtol 1e-3); JVP methods agree; symmetrized == plain for symmetric J
+- [x] **Gate:** `scripts/sanity_gaussian.py --config configs/local.yaml` passes on the
+      Mac (2026-08-17: PASS, rel err ≤0.3%, |cos| ≥0.995 — see LOG.md)
 
 ## Phase 2 — Real denoiser integration
 

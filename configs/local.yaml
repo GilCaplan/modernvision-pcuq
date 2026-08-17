@@ -26,7 +26,7 @@ jacobian:
 
 spectrum:
   n_ev: 2
-  iters: 3
+  iters: 10
   symmetrize: true
 
 diagnostics:
