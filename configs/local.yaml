@@ -19,10 +19,11 @@ denoiser:
   kind: analytic_gaussian   # analytic_gaussian | noise2score3d
   repo: external/Noise2Score3D
   checkpoint: data/checkpoints/noise2score3d_step4500.pth
+  freeze_graph: true    # differentiate the smooth branch (see LOG.md 2026-08-17)
 
 jacobian:
   method: central       # forward | central | autograd
-  c: 1.0e-4             # perturbation step; sweep via diagnostics
+  c: 1.0e-3             # sweep-validated plateau (frozen graph, see LOG.md)
   batch_jvp: 2
 
 spectrum:

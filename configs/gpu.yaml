@@ -20,10 +20,11 @@ denoiser:
   kind: noise2score3d
   repo: external/Noise2Score3D
   checkpoint: data/checkpoints/noise2score3d_step4500.pth
+  freeze_graph: true    # differentiate the smooth branch (see LOG.md 2026-08-17)
 
 jacobian:
   method: central
-  c: 1.0e-4
+  c: 1.0e-3
   batch_jvp: 5
 
 spectrum:

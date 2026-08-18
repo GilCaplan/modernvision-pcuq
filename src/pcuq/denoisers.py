@@ -139,6 +139,37 @@ class Noise2Score3DWrapper(Denoiser):
         for p in self.model.parameters():
             p.requires_grad_(False)
         self.sigma = sigma
+        self._n2s3d = n2s3d
+        self._graph_cache = None
+
+    @contextlib.contextmanager
+    def graph_frozen(self):
+        """Freeze the graph pyramid at the anchor for all forwards in this context.
+
+        Their forward rebuilds the voxel/radius graph every call; a perturbation
+        y + c*v flips discrete assignments, so finite differences pick up O(1)
+        jumps instead of the smooth local derivative (measured: no step-size
+        plateau, ~40-80%% self-consistency error). Inside this context the FIRST
+        forward builds and caches the pyramid — call denoise(anchor) first — and
+        later forwards reuse its discrete indices and coarse-level positions,
+        with only the level-0 points varying: the smooth branch of the model.
+        """
+        orig = self._n2s3d.build_grid_and_radius_graph_pyramid
+
+        def cached_build(points, lengths, *args, **kwargs):
+            if self._graph_cache is None:
+                self._graph_cache = orig(points, lengths, *args, **kwargs)
+                return self._graph_cache
+            g = dict(self._graph_cache)
+            g["points"] = [points] + list(self._graph_cache["points"][1:])
+            return g
+
+        self._n2s3d.build_grid_and_radius_graph_pyramid = cached_build
+        try:
+            yield
+        finally:
+            self._n2s3d.build_grid_and_radius_graph_pyramid = orig
+            self._graph_cache = None
 
     def denoise(self, y: torch.Tensor) -> torch.Tensor:
         outs = []
