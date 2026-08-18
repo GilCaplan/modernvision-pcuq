@@ -46,16 +46,18 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 - [x] **Gate:** tiny end-to-end run on the Mac — `check_denoiser.py` PASS @ N=2048
       (denoising improves MSE, spectrum extracted; sphere shape — ModelNet still open)
 
-## Phase 3 — Full experiments (GPU VM) — **ready to start**
+## Phase 3 — Full experiments ✅ (ran on the Mac; VM turned out unnecessary)
 
-`run_experiment.py` is fully implemented (shapes × σ loop, spectrum, diagnostics,
-mode figures, metrics.json); VM setup is a copy-paste block in
-[WORKFLOW.md](WORKFLOW.md). Smoke-verified on the Mac for both denoiser kinds.
-
-- [ ] Step-size sweep + finite-diff vs autograd validation at full N (`configs/gpu.yaml`)
-- [ ] Top 3–5 eigenpairs across shape categories and noise levels σ
-- [ ] Antisymmetry / PSD monitoring across all runs (report numbers, not vibes)
-- [ ] Convergence: power-iteration correlation curves (as in the reference repo)
+- [x] Step-size sweep at full N — plateau at c=1e-3 (frozen graph), now the default
+- [x] Top 5 eigenpairs, 50 shapes × 5 categories × σ∈{0.01,0.02,0.05}
+      (`outputs/phase3/`, 150 runs) — headline: **calibrated at the σ² bound
+      in-distribution (1.06σ² @ σ=0.01), degrades to breakdown beyond the model's
+      training range [0.004, 0.034]** — see LOG.md 2026-08-17 Phase-3 entry
+- [x] Antisymmetry / PSD monitoring in every run (antisym ≤0.01 in-distribution;
+      191/250 negative eigvals at out-of-range σ=0.05 — a finding, not a bug)
+- [x] Convergence tracked per run (overlap history saved in each .pt)
+- [ ] Optional follow-ups: σ=0.03 run (breakdown boundary), unfrozen ablation slice
+      at full scale for the A/B table
 
 ## Phase 4 — Analysis, visualization, report
 
