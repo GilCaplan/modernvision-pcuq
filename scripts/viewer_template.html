@@ -58,6 +58,14 @@
   .toggles input { accent-color: var(--blue); }
   .readout { font-family: var(--mono); font-size: 12px; color: var(--muted);
              line-height: 1.75; border-top: 1px solid var(--line); padding-top: 12px; }
+  .tile { background: var(--panel-2); border: 1px solid var(--line);
+          border-radius: 8px; padding: 10px 12px; }
+  .tile .tl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
+              color: var(--muted); margin-bottom: 2px; }
+  .tile .tv { font-family: var(--mono); font-size: 20px; color: var(--ink); }
+  .tile .ts { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  .tile .badge { display: inline-block; font-size: 10.5px; padding: 1px 7px;
+                 border-radius: 99px; margin-left: 8px; vertical-align: 3px; }
   .readout b { color: var(--ink); font-weight: 500; }
   .hidden { display: none !important; }
   @media (max-width: 760px) {
@@ -85,16 +93,17 @@
       <div id="g-region"><p class="group-label">Region (move the mask)</p><div class="chips" id="regions"></div></div>
       <div id="g-method"><p class="group-label">Estimator</p><div class="chips" id="methods"></div></div>
       <div id="g-free" class="hidden">
-        <p class="group-label">Draw your own mask</p>
+        <p class="group-label">Your mask — drag it on the shape</p>
         <div class="chips" style="margin-bottom:8px">
+          <button id="move" aria-pressed="true">✋ Move</button>
           <button id="paint" aria-pressed="false">✏ Paint</button>
           <button id="clearmask">Clear</button>
-          <button id="computemask">Compute modes</button>
+          <button id="computemask">Compute</button>
         </div>
         <div class="slider-row">
-          <span style="color:var(--muted);font-size:12px">brush</span>
+          <span style="color:var(--muted);font-size:12px">size</span>
           <input type="range" id="brush" min="8" max="48" step="2" value="22"
-                 aria-label="brush radius">
+                 aria-label="region size">
         </div>
       </div>
       <div id="g-run2d" class="hidden"><p class="group-label">Image</p><div class="chips" id="runs2d"></div></div>
@@ -125,6 +134,7 @@
         <label id="l-heat" class="hidden"><input type="checkbox" id="heat">
           Uncertainty heatmap (per-point &sigma;)</label>
       </div>
+      <div class="tile" id="conf"></div>
       <div class="readout" id="readout"></div>
     </aside>
     <div class="viewport">
@@ -146,7 +156,8 @@
                method: "frozen", run2: 0, mode: 0, t: 0, amp: 4,
                yaw: 0.7, pitch: -0.35, zoom: 1,
                osc: !reduced, spin: false, dimctx: true, ghost: true, heat: false,
-               painting: false, brush: 22, painted: new Set(), freeRun: null };
+               painting: false, moveMode: true, maskCenter: null,
+               brush: 22, painted: new Set(), freeRun: null };
 
   // ---- free-mask support: rank-k whole-shape spectra --------------------
   const FREE = {};  // shape -> {sigma, eigvals, x_hat, modes Float32Array, k, n}
@@ -310,9 +321,12 @@
             v => v === "free" ? st.region === "free"
               : (st.region !== "free" && v.region === st.region),
             v => {
-              if (v === "free") { st.region = "free"; st.painting = true; }
-              else { st.region = v.region; st.painting = false; }
+              if (v === "free") {
+                st.region = "free"; st.moveMode = true; st.painting = false;
+                defaultRegion();  // place a draggable region immediately
+              } else { st.region = v.region; st.painting = false; st.moveMode = false; }
               $("paint").setAttribute("aria-pressed", String(st.painting));
+              $("move").setAttribute("aria-pressed", String(st.moveMode));
             });
       $("g-free").classList.toggle("hidden", st.region !== "free");
       $("l-heat").classList.toggle("hidden", !freeFor());
@@ -322,10 +336,12 @@
         : run3();
       $("legend").innerHTML = `<i style="background:var(--coral)"></i>mask (selected region)` +
         `<i style="background:#747f94"></i>rest of shape<i style="background:rgba(255,138,122,.3)"></i>ghost t=0`;
-      $("hint").textContent = (st.region === "free" && st.painting)
-        ? "drag to paint the mask · toggle ✏ Paint off to rotate"
+      $("hint").textContent = st.region !== "free" ? "drag to rotate · scroll to zoom"
+        : st.painting ? "drag to paint points · ✋ Move to drag the region · both off to rotate"
+        : st.moveMode ? "drag to MOVE the region on the shape · both toggles off to rotate"
         : "drag to rotate · scroll to zoom";
-      canvas.style.cursor = (st.region === "free" && st.painting) ? "crosshair" : "grab";
+      canvas.style.cursor = (st.region === "free" && (st.painting || st.moveMode))
+        ? "crosshair" : "grab";
     } else {
       chips($("runs2d"), runs2, v => v.kind === "mnist" ? `digit ${v.label}` : `face · ${v.label}`,
             (v, i) => i === st.run2, (v, i) => { st.run2 = i; });
@@ -361,6 +377,23 @@
           ` = <b>${(Math.sqrt(r.eigvals[0]) / r.sigma).toFixed(2)}×</b> the noise σ`
         : `<br>√λ₀ std = <b>${(Math.sqrt(r.eigvals[0]) / r.sigma).toFixed(2)}×</b> the noise σ`)
       : "";
+    // confidence tile: the model's uncertainty for THIS region, in plain terms
+    if (r.eigvals && r.eigvals.length && r.eigvals[0] > 0) {
+      const ratio = Math.sqrt(r.eigvals[0]) / r.sigma;
+      const [label, color] = ratio < 1.1 ? ["calibrated — noise-limited", "#3987e5"]
+        : ratio < 1.6 ? ["elevated uncertainty", "#eda100"]
+        : ["ambiguous — beyond noise floor", "#ff8a7a"];
+      $("conf").classList.remove("hidden");
+      $("conf").innerHTML =
+        `<div class="tl">model confidence here (top mode)</div>` +
+        `<div class="tv">±${is3d ? (Math.sqrt(r.eigvals[0]) * 100).toFixed(1) + "%"
+                                 : "±" + Math.sqrt(r.eigvals[0]).toFixed(3)}` +
+        `<span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}55">${ratio.toFixed(1)}× noise</span></div>` +
+        `<div class="ts">std along the top uncertainty mode` +
+        `${is3d ? ", as % of shape size" : ""} — larger = less sure</div>`;
+    } else {
+      $("conf").classList.add("hidden");
+    }
     const prov = is3d
       ? `run <b>${r.tag}</b><br>mask <b>${r.mask_idx.length}</b> pts · spread <b>${Math.round(r.spread * 100)}%</b>` + sure + freeNote +
         (r.psd_ok ? "" : `<br>⚠ smallest eigval &lt; 0 (non-PSD)`) +
@@ -515,6 +548,60 @@
   $("ghost").onchange = e => { st.ghost = e.target.checked; draw(); };
   $("spin").onchange = e => { st.spin = e.target.checked; };
 
+  function applyRegionAt(centerIdx) {
+    // movable region: all points within a 3D radius of the chosen surface point
+    const f = freeFor();
+    if (!f) return;
+    st.maskCenter = centerIdx;
+    const R = st.brush / 100;  // unit-sphere shapes: size slider = 0.08..0.48
+    const cx = f.x_hat[3 * centerIdx], cy = f.x_hat[3 * centerIdx + 1],
+          cz = f.x_hat[3 * centerIdx + 2];
+    st.painted = new Set();
+    for (let i = 0; i < f.n; i++) {
+      const dx = f.x_hat[3 * i] - cx, dy = f.x_hat[3 * i + 1] - cy,
+            dz = f.x_hat[3 * i + 2] - cz;
+      if (dx * dx + dy * dy + dz * dz <= R * R) st.painted.add(i);
+    }
+    st.freeRun = computeFreeModes();  // milliseconds: 24x24 eigensolve
+  }
+
+  function pickPoint(e) {
+    const f = freeFor();
+    if (!f) return -1;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const proj = proj3(rect.width, rect.height);
+    let best = -1, bestD = 40 * 40;  // must be within 40px of a point
+    for (let i = 0; i < f.n; i++) {
+      const [px, py] = proj(f.x_hat[3 * i], f.x_hat[3 * i + 1], f.x_hat[3 * i + 2]);
+      const d = (px - mx) ** 2 + (py - my) ** 2;
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
+  function moveMaskTo(e) {
+    const idx = pickPoint(e);
+    if (idx < 0) return;
+    applyRegionAt(idx);
+    build(); draw();
+  }
+
+  function defaultRegion() {
+    // start at the shape's extremity — where uncertainty tends to live
+    const f = freeFor();
+    if (!f || st.painted.size) return;
+    let cx = 0, cy = 0, cz = 0;
+    for (let i = 0; i < f.n; i++) { cx += f.x_hat[3*i]; cy += f.x_hat[3*i+1]; cz += f.x_hat[3*i+2]; }
+    cx /= f.n; cy /= f.n; cz /= f.n;
+    let best = 0, bd = -1;
+    for (let i = 0; i < f.n; i++) {
+      const d = (f.x_hat[3*i]-cx)**2 + (f.x_hat[3*i+1]-cy)**2 + (f.x_hat[3*i+2]-cz)**2;
+      if (d > bd) { bd = d; best = i; }
+    }
+    applyRegionAt(best);
+  }
+
   function paintAt(e) {
     const f = freeFor();
     if (!f) return;
@@ -533,28 +620,44 @@
     draw();
   }
   const isPainting = () => st.tab === "3d" && st.region === "free" && st.painting;
+  const isMoving = () => st.tab === "3d" && st.region === "free" && st.moveMode;
   let dragp = null;
   canvas.addEventListener("pointerdown", e => {
     canvas.setPointerCapture(e.pointerId);
+    if (st.osc) { st.osc = false;  // touching the canvas stops the auto-sweep
+      $("osc").setAttribute("aria-pressed", "false"); }
     if (isPainting()) { dragp = "paint"; paintAt(e); return; }
+    if (isMoving()) { dragp = "move"; moveMaskTo(e); return; }
     dragp = { x: e.clientX, y: e.clientY }; });
   canvas.addEventListener("pointermove", e => {
     if (!dragp || st.tab !== "3d") return;
     if (dragp === "paint") { paintAt(e); return; }
+    if (dragp === "move") { moveMaskTo(e); return; }
     st.yaw += (e.clientX - dragp.x) * 0.008;
     st.pitch = Math.max(-1.4, Math.min(1.4, st.pitch + (e.clientY - dragp.y) * 0.008));
     dragp = { x: e.clientX, y: e.clientY }; draw(); });
-  canvas.addEventListener("pointerup", () => dragp = null);
-  $("paint").onclick = () => { st.painting = !st.painting;
-    $("paint").setAttribute("aria-pressed", String(st.painting));
-    canvas.style.cursor = st.painting ? "crosshair" : "grab"; };
-  $("clearmask").onclick = () => { st.painted.clear(); st.freeRun = null;
+  canvas.addEventListener("pointerup", () => {
+    if (dragp === "paint" && st.painted.size >= 8) {  // auto-compute after painting
+      st.freeRun = computeFreeModes(); build();
+    }
+    dragp = null; draw(); });
+  const setTools = (paint, move) => {
+    st.painting = paint; st.moveMode = move;
+    $("paint").setAttribute("aria-pressed", String(paint));
+    $("move").setAttribute("aria-pressed", String(move));
     build(); draw(); };
+  $("paint").onclick = () => setTools(!st.painting, false);
+  $("move").onclick = () => setTools(false, !st.moveMode);
+  $("clearmask").onclick = () => { st.painted.clear(); st.freeRun = null;
+    st.maskCenter = null; build(); draw(); };
   $("computemask").onclick = () => {
     st.freeRun = computeFreeModes();
     if (!st.freeRun) return;  // needs >= 8 painted points
     st.mode = 0; build(); draw(); };
-  $("brush").oninput = e => { st.brush = +e.target.value; };
+  $("brush").oninput = e => { st.brush = +e.target.value;
+    if (isMoving() && st.maskCenter != null) {  // live-resize the region
+      applyRegionAt(st.maskCenter); build(); draw();
+    } };
   canvas.addEventListener("wheel", e => {
     if (st.tab !== "3d") return;
     e.preventDefault();
