@@ -27,7 +27,26 @@ def jvp(denoiser: Denoiser, y: torch.Tensor, v: torch.Tensor,
     if method == "autograd":
         f = lambda x: denoiser(x[None])[0]
         return torch.stack([torch.func.jvp(f, (y,), (vi,))[1] for vi in v])
+    if method == "bp":
+        # Plain reverse-mode: returns J^T v, NOT J v. Power iteration and
+        # symmetric-part quantities are unaffected (same singular subspace);
+        # use where torch.func can't trace (custom autograd.Functions, e.g.
+        # guided_diffusion). cf. the reference repo's compare_backprop path.
+        return vjp_bp(denoiser, y, v)
     raise ValueError(f"unknown jvp method: {method}")
+
+
+def vjp_bp(denoiser: Denoiser, y: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    """J^T v per direction via torch.autograd.grad — no functorch involved, so it
+    works through vendored custom autograd.Functions."""
+    outs = []
+    for vi in v:
+        yg = y.detach().clone().requires_grad_(True)
+        with torch.enable_grad():
+            out = denoiser(yg[None])[0]
+            (g,) = torch.autograd.grad((out * vi).sum(), yg)
+        outs.append(g)
+    return torch.stack(outs)
 
 
 def vjp(denoiser: Denoiser, y: torch.Tensor, v: torch.Tensor) -> torch.Tensor:

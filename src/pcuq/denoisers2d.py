@@ -44,8 +44,9 @@ class MNISTDenoiser2D(Denoiser):
         self.sigma = self.SIGMA
 
     def denoise(self, y: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            return self.wrapper(y)
+        # no torch.no_grad here: reverse-mode products need the graph; params
+        # are frozen and finite-diff callers wrap no_grad themselves.
+        return self.wrapper(y)
 
 
 class FFHQDenoiser2D(Denoiser):
@@ -77,6 +78,13 @@ class FFHQDenoiser2D(Denoiser):
                 fake.MPI = types.SimpleNamespace(COMM_WORLD=_Comm())
                 sys.modules["mpi4py"] = fake
         from models_wrappers.ddpm_wrapper import DiffWrapper
+        # Their UNet routes every block through CheckpointFunction, whose backward
+        # differentiates w.r.t. the (frozen) params and crashes. We never need
+        # activation checkpointing at inference scale — bypass it so reverse-mode
+        # products w.r.t. the INPUT work. (unet.py imports `checkpoint` by name.)
+        from guided_diffusion import nn as gd_nn, unet as gd_unet
+        gd_nn.checkpoint = gd_unet.checkpoint = \
+            lambda func, inputs, params, flag: func(*inputs)
         repo = Path(repo_dir).resolve()
         self.wrapper = DiffWrapper(from_t=from_t, device=device,
                                    double_precision=False,
@@ -85,5 +93,4 @@ class FFHQDenoiser2D(Denoiser):
         self.sigma = float(self.wrapper.get_noise())
 
     def denoise(self, y: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad():
-            return self.wrapper(y)
+        return self.wrapper(y)

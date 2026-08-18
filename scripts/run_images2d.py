@@ -32,13 +32,14 @@ def q(t, nd=4):
     return [round(float(v), nd) for v in t.reshape(-1)]
 
 
-def run_one(den, name, x, mask, k, iters, c, out, viewer_runs, meta):
+def run_one(den, name, x, mask, k, iters, c, out, viewer_runs, meta,
+            method="autograd"):
     y = corrupt(x[None], den.sigma, seed=0)[0]
     with torch.no_grad():
         x_hat = den(y[None])[0]
     eigvecs, eigvals, history = top_eigenpairs(
-        den, y, den.sigma, k=k, iters=iters, method="central", c=c, mask=mask)
-    asym = antisym_energy_fd(den, y, eigvecs, method="central", c=c)
+        den, y, den.sigma, k=k, iters=iters, method=method, c=c, mask=mask)
+    asym = antisym_energy_fd(den, y, eigvecs, method=method, c=c)
     print(f"[{name}] eigvals {eigvals.cpu().numpy()} | "
           f"eigval/σ² {(eigvals[0] / den.sigma**2).item():.2f} | antisym {asym:.3f} | "
           f"overlap {history[-1].numpy()}")
@@ -69,6 +70,11 @@ def main() -> None:
     parser.add_argument("--digits", type=int, nargs="*", default=[2, 1, 18])
     parser.add_argument("--n-ev", type=int, default=4)
     parser.add_argument("--iters", type=int, default=25)
+    # These are smooth CNNs (no graph rebuilds), so exact autograd JVPs work and
+    # avoid float32 finite-difference noise, which power iteration otherwise
+    # amplifies into spiky artifact modes.
+    parser.add_argument("--method", choices=["autograd", "central", "bp"],
+                        default="autograd")
     args = parser.parse_args()
     set_seed(0)
     device = torch.device("cpu")
@@ -86,7 +92,7 @@ def main() -> None:
             x = torch.from_numpy(__import__("numpy").array(img)).float()[None] / 255
             run_one(den, f"mnist{i}_digit{label}", x, None, args.n_ev, args.iters,
                     c=1e-3, out=out, viewer_runs=viewer_runs,
-                    meta={"kind": "mnist", "label": int(label)})
+                    meta={"kind": "mnist", "label": int(label)}, method=args.method)
         sweep = sweep_step_size_fd(den, corrupt(x[None], den.sigma, 0)[0],
                                    [1e-2, 1e-3, 1e-4])
         print("step-size self-consistency:", {k: f"{v:.1e}" for k, v in sweep.items()})
@@ -105,11 +111,12 @@ def main() -> None:
             mask[:, y1:y2, x1:x2] = True
             run_one(den, f"face_{rname}_t{args.from_t}", x, mask, 3,
                     iters=8, c=1e-3, out=out, viewer_runs=viewer_runs,
-                    meta={"kind": "ffhq", "label": rname})
+                    meta={"kind": "ffhq", "label": rname}, method=args.method)
 
     bundle = ROOT / "results/viewer_data_2d.json"
     existing = json.loads(bundle.read_text())["runs"] if bundle.exists() else []
-    existing = [r for r in existing if r["kind"] != args.model] + viewer_runs
+    new_tags = {r["tag"] for r in viewer_runs}
+    existing = [r for r in existing if r["tag"] not in new_tags] + viewer_runs
     bundle.write_text(json.dumps({"runs": existing}, separators=(",", ":")))
     print(f"done — {len(viewer_runs)} runs, figures at {out}, "
           f"viewer bundle {bundle} ({bundle.stat().st_size / 1e6:.1f} MB)")

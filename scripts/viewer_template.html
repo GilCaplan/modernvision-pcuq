@@ -159,7 +159,7 @@
 
   function build() {
     const is3d = st.tab === "3d";
-    ["g-shape", "g-sigma", "g-region", "g-method", "g-amp", "g-toggles"].forEach(
+    ["g-shape", "g-sigma", "g-region", "g-method", "g-toggles"].forEach(
       id => $(id).classList.toggle("hidden", !is3d));
     $("g-run2d").classList.toggle("hidden", is3d);
     $("hint").classList.toggle("hidden", !is3d);
@@ -266,7 +266,7 @@
     const r = runs2[st.run2], C = r.c, H = r.h, W = r.w, npix = H * W;
     off.width = W; off.height = H;
     const im = off.getContext("2d").createImageData(W, H);
-    const step = st.t * Math.sqrt(Math.max(r.eigvals[st.mode], 0));
+    const step = st.t * st.amp * Math.sqrt(Math.max(r.eigvals[st.mode], 0));
     const mode = r.modes[st.mode];
     const inM = new Int32Array(C * npix).fill(-1);
     let mi = 0;
