@@ -68,6 +68,11 @@
                  border-radius: 99px; margin-left: 8px; vertical-align: 3px; }
   .readout b { color: var(--ink); font-weight: 500; }
   .hidden { display: none !important; }
+  .tooltip { position: absolute; pointer-events: none; background: #232a35f2;
+             border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px;
+             font-family: var(--mono); font-size: 11.5px; color: var(--ink);
+             line-height: 1.6; white-space: nowrap; z-index: 3; }
+  .tooltip .dim { color: var(--muted); }
   @media (max-width: 760px) {
     .main { flex-direction: column; }
     aside { width: 100%; border-right: 0; border-bottom: 1px solid var(--line);
@@ -93,8 +98,8 @@
       <div id="g-region"><p class="group-label">Region (move the mask)</p><div class="chips" id="regions"></div></div>
       <div id="g-method"><p class="group-label">Estimator</p><div class="chips" id="methods"></div></div>
       <div id="g-free" class="hidden">
-        <p class="group-label">Your mask — drag it on the shape</p>
-        <div class="chips" style="margin-bottom:8px">
+        <p class="group-label">Your mask — drag it in the view</p>
+        <div class="chips" style="margin-bottom:8px" id="freebtns">
           <button id="move" aria-pressed="true">✋ Move</button>
           <button id="paint" aria-pressed="false">✏ Paint</button>
           <button id="clearmask">Clear</button>
@@ -139,6 +144,7 @@
     </aside>
     <div class="viewport">
       <canvas id="c"></canvas>
+      <div class="tooltip hidden" id="tip"></div>
       <div class="legend" id="legend"></div>
       <div class="hint" id="hint">drag to rotate &middot; scroll to zoom</div>
     </div>
@@ -150,14 +156,117 @@
   const $ = id => document.getElementById(id);
   const canvas = $("c"), ctx = canvas.getContext("2d");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const runs3 = DATA3D.runs, clouds = DATA3D.clouds, runs2 = DATA2D.runs;
+  const runs3 = DATA3D.runs, clouds = DATA3D.clouds;
+  const imgs2 = DATA2D.images || [];
+
+  // per-image lazy caches: decoded modes, base pixels, per-pixel sigma map
+  const IC = imgs2.map(() => ({}));
+  function img2(i) {
+    const e = imgs2[i], c = IC[i];
+    if (!c.modes) {
+      const raw = atob(e.modes_b64), n16 = raw.length / 2;
+      const m = new Float32Array(n16);
+      for (let j = 0; j < n16; j++)
+        m[j] = (((raw.charCodeAt(2 * j) | (raw.charCodeAt(2 * j + 1) << 8)) << 16 >> 16)
+                / 32767) * e.modes_scale;
+      c.modes = m;  // (k, C, mh, mw) flattened
+      const mpix = e.mh * e.mw;
+      const s = new Float32Array(mpix);
+      for (let ki = 0; ki < e.k; ki++) {
+        const lam = Math.max(e.eigvals[ki], 0), off = ki * e.c * mpix;
+        for (let p = 0; p < mpix; p++) {
+          let v = 0;
+          for (let ch = 0; ch < e.c; ch++) v += m[off + ch * mpix + p] ** 2;
+          s[p] += lam * v;
+        }
+      }
+      c.smax = 0;
+      for (let p = 0; p < mpix; p++) { s[p] = Math.sqrt(s[p]); if (s[p] > c.smax) c.smax = s[p]; }
+      c.sigmaMap = s;
+    }
+    if (!c.base && !c.loading) {
+      c.loading = true;
+      const im = new Image();
+      im.onload = () => {
+        const oc = document.createElement("canvas");
+        oc.width = e.w; oc.height = e.h;
+        const octx = oc.getContext("2d");
+        octx.drawImage(im, 0, 0);
+        const d = octx.getImageData(0, 0, e.w, e.h).data;
+        const npix = e.w * e.h, base = new Float32Array(e.c * npix);
+        let lo = 1, hi = 0;
+        for (let p = 0; p < npix; p++)
+          for (let ch = 0; ch < e.c; ch++) {
+            const v = d[4 * p + (e.c === 1 ? 0 : ch)] / 255;
+            base[ch * npix + p] = v;
+            if (v < lo) lo = v; if (v > hi) hi = v;
+          }
+        if (e.kind === "mnist" && hi > lo)  // display contrast stretch
+          for (let j = 0; j < base.length; j++) base[j] = (base[j] - lo) / (hi - lo);
+        c.base = base;
+        draw();
+      };
+      im.src = e.png;
+    }
+    return c;
+  }
+
+  function defaultBox(e) {  // in mode-res coords
+    const side = Math.round(0.4 * Math.min(e.mw, e.mh));
+    return { cx: e.mw / 2, cy: e.mh / 2, side };
+  }
+
+  function computeFree2d() {
+    const e = imgs2[st.img], c = img2(st.img);
+    if (!c.modes || !st.box) return null;
+    const mpix = e.mh * e.mw, half = st.box.side / 2;
+    const x0 = Math.max(0, Math.round(st.box.cx - half)),
+          x1 = Math.min(e.mw, Math.round(st.box.cx + half)),
+          y0 = Math.max(0, Math.round(st.box.cy - half)),
+          y1 = Math.min(e.mh, Math.round(st.box.cy + half));
+    const S = [];
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) S.push(y * e.mw + x);
+    if (S.length < 4) return null;
+    const lam = e.eigvals.map(v => Math.max(v, 0)), k = e.k;
+    const dot = (a, b) => {
+      let s = 0;
+      for (let ch = 0; ch < e.c; ch++) {
+        const oa = a * e.c * mpix + ch * mpix, ob = b * e.c * mpix + ch * mpix;
+        for (const p of S) s += c.modes[oa + p] * c.modes[ob + p];
+      }
+      return s;
+    };
+    const K = Array.from({length: k}, (_, i) => Array.from({length: k}, (_, j) =>
+      Math.sqrt(lam[i] * lam[j]) * dot(i, j)));
+    const { vals, vecs } = jacobiEig(K, k);
+    const order = vals.map((v, i) => [v, i]).sort((a, b) => b[0] - a[0]).slice(0, 3);
+    const out = { eigvals: order.map(o => o[0]), modes: [], box: {x0, x1, y0, y1} };
+    for (const [mu, j] of order) {
+      const u = new Float32Array(e.c * mpix);
+      for (let i = 0; i < k; i++) {
+        const co = Math.sqrt(lam[i]) * vecs[i][j];
+        if (!co) continue;
+        for (let ch = 0; ch < e.c; ch++) {
+          const off = i * e.c * mpix + ch * mpix, uo = ch * mpix;
+          for (const p of S) u[uo + p] += co * c.modes[off + p];
+        }
+      }
+      let nrm = 0;
+      for (const v of u) nrm += v * v;
+      nrm = Math.sqrt(nrm) || 1;
+      for (let j2 = 0; j2 < u.length; j2++) u[j2] /= nrm;
+      out.modes.push(u);
+    }
+    return out;
+  }
 
   const st = { tab: "3d", shape: runs3[0].shape, sigma: null, region: null,
                method: "frozen", run2: 0, mode: 0, t: 0, amp: 4,
                yaw: 0.7, pitch: -0.35, zoom: 1,
                osc: !reduced, spin: false, dimctx: true, ghost: true, heat: false,
                painting: false, moveMode: true, maskCenter: null,
-               brush: 22, painted: new Set(), freeRun: null };
+               brush: 22, painted: new Set(), freeRun: null,
+               img: 0, box: null, free2d: null };
 
   // ---- free-mask support: rank-k whole-shape spectra --------------------
   const FREE = {};  // shape -> {sigma, eigvals, x_hat, modes Float32Array, k, n}
@@ -278,7 +387,7 @@
   const run3 = () => runs3.find(r => r.shape === st.shape && r.sigma === st.sigma
                                      && (r.method || "frozen") === st.method
                                      && r.region === st.region);
-  const cur = () => st.tab === "3d" ? run3() : runs2[st.run2];
+  const cur = () => st.tab === "3d" ? run3() : imgs2[st.img];
 
   function chips(el, items, fmt, isOn, set) {
     el.replaceChildren(...items.map((v, i) => {
@@ -329,6 +438,7 @@
               $("move").setAttribute("aria-pressed", String(st.moveMode));
             });
       $("g-free").classList.toggle("hidden", st.region !== "free");
+      $("freebtns").classList.remove("hidden");
       $("l-heat").classList.toggle("hidden", !freeFor());
       r = st.region === "free"
         ? (st.freeRun || { tag: "draw a mask, then Compute", eigvals: [],
@@ -342,11 +452,26 @@
         : "drag to rotate · scroll to zoom";
       canvas.style.cursor = (st.region === "free" && (st.painting || st.moveMode))
         ? "crosshair" : "grab";
+    } else if (!imgs2.length) {
+      $("runs2d").replaceChildren();
+      $("g-free").classList.add("hidden");
+      r = { tag: "2D data not bundled yet", eigvals: [], sigma: 1, kind: "" };
+      $("legend").textContent = "";
     } else {
-      chips($("runs2d"), runs2, v => v.kind === "mnist" ? `digit ${v.label}` : `face · ${v.label}`,
-            (v, i) => i === st.run2, (v, i) => { st.run2 = i; });
-      r = runs2[st.run2];
-      $("legend").textContent = "region outside the mask is dimmed";
+      $("g-free").classList.remove("hidden");  // size slider works on the box
+      $("freebtns").classList.add("hidden");   // drag always moves it in 2D
+      chips($("runs2d"), imgs2, v => v.label,
+            (v, i) => i === st.img,
+            (v, i) => { st.img = i; st.box = defaultBox(imgs2[i]);
+                        st.free2d = computeFree2d(); });
+      const e = imgs2[st.img];
+      if (!st.box) { st.box = defaultBox(e); st.free2d = computeFree2d(); }
+      r = st.free2d
+        ? { tag: `${e.id} (${e.kind}) · movable mask`, sigma: e.sigma,
+            eigvals: st.free2d.eigvals, kind: e.kind }
+        : { tag: e.id, sigma: e.sigma, eigvals: [], kind: e.kind };
+      $("legend").textContent = "drag the box to move the mask · size slider resizes it";
+      $("hint").textContent = "hover for local σ · drag = move the mask";
     }
     if (st.mode >= r.eigvals.length) st.mode = 0;
     if (!r.eigvals.length) {
@@ -387,7 +512,7 @@
       $("conf").innerHTML =
         `<div class="tl">model confidence here (top mode)</div>` +
         `<div class="tv">±${is3d ? (Math.sqrt(r.eigvals[0]) * 100).toFixed(1) + "%"
-                                 : "±" + Math.sqrt(r.eigvals[0]).toFixed(3)}` +
+                                 : Math.sqrt(r.eigvals[0]).toFixed(3)}` +
         `<span class="badge" style="background:${color}22;color:${color};border:1px solid ${color}55">${ratio.toFixed(1)}× noise</span></div>` +
         `<div class="ts">std along the top uncertainty mode` +
         `${is3d ? ", as % of shape size" : ""} — larger = less sure</div>`;
@@ -400,8 +525,11 @@
         (r.conv_ok === false ? `<br>⚠ subspace iteration did not converge` : "") +
         naiveWarn +
         `<br><br>Measured: ModelNet40 shape, frozen<br>Noise2Score3D, subspace iteration<br>(outputs/masked-grid*).`
-      : `run <b>${r.tag}</b><br>σ = <b>${r.sigma}</b> · λ₀/σ² = <b>${(r.eigvals[0] / (r.sigma * r.sigma)).toFixed(1)}</b>` + sure +
-        `<br><br>Measured: the reference repo's own<br>${r.kind === "mnist" ? "MNIST CNN" : "DDPM FFHQ"} denoiser, run through<br>OUR pipeline (outputs/images2d).`;
+      : `run <b>${r.tag}</b><br>σ = <b>${r.sigma}</b>` +
+        (r.eigvals.length ? ` · λ₀/σ² = <b>${(r.eigvals[0] / (r.sigma * r.sigma)).toFixed(1)}</b>` : "") + sure +
+        (imgs2.length ? `<br><b>rank-${imgs2[st.img].k} reconstruction</b> for the box mask` : "") +
+        (r.kind === "mnist" ? `<br>display contrast-stretched` : "") +
+        `<br><br>Measured: the reference repo's own<br>${r.kind === "mnist" ? "MNIST CNN" : "DDPM FFHQ"} denoiser, run through<br>OUR pipeline (outputs/fullspectrum2d).`;
     $("readout").innerHTML = prov;
   }
 
@@ -478,36 +606,74 @@
     }
   }
 
-  // ---------- 2D rendering ----------
+  // ---------- 2D rendering: PNG base + live box-mask modes ----------
   const off = document.createElement("canvas");
+  function view2d(w, h) {
+    const e = imgs2[st.img];
+    const scale = Math.min((w - 40) / e.w, (h - 40) / e.h);
+    return { e, scale, ox: (w - e.w * scale) / 2, oy: (h - e.h * scale) / 2 };
+  }
   function draw2d(w, h) {
-    const r = runs2[st.run2], C = r.c, H = r.h, W = r.w, npix = H * W;
-    off.width = W; off.height = H;
-    const im = off.getContext("2d").createImageData(W, H);
-    const step = st.t * st.amp * Math.sqrt(Math.max(r.eigvals[st.mode], 0));
-    const mode = r.modes[st.mode];
-    const inM = new Int32Array(C * npix).fill(-1);
-    let mi = 0;
-    for (let e = 0; e < C * npix; e++) if (r.mask[e]) inM[e] = mi++;
-    const lo = r.kind === "ffhq" ? -1 : 0, span = r.kind === "ffhq" ? 2 : 1;
+    if (!imgs2.length) return;
+    const { e, scale, ox, oy } = view2d(w, h);
+    const c = img2(st.img);
+    if (!c.base) return;  // PNG still decoding; redraw fires onload
+    const npix = e.w * e.h, fx = e.w / e.mw, fy = e.h / e.mh;
+    off.width = e.w; off.height = e.h;
+    const im = off.getContext("2d").createImageData(e.w, e.h);
+    const fr = st.free2d;
+    const u = fr && fr.modes[st.mode];
+    // sigma in the model's own value range vs display [0,1]
+    const span = e.kind === "ffhq" ? 2 : 1;
+    const step = u ? st.t * st.amp * Math.sqrt(Math.max(fr.eigvals[st.mode], 0)) / span : 0;
+    const b = fr && fr.box;
     for (let p = 0; p < npix; p++) {
-      let masked = false;
-      const rgb = [0, 0, 0];
-      for (let ch = 0; ch < C; ch++) {
-        const e = ch * npix + p;
-        let v = r.x_hat[e];
-        if (inM[e] >= 0) { v += step * mode[inM[e]]; masked = true; }
-        rgb[ch] = Math.max(0, Math.min(1, (v - lo) / span)) * 255;
+      const x = p % e.w, y = (p / e.w) | 0;
+      const mx = Math.min(e.mw - 1, (x / fx) | 0), my = Math.min(e.mh - 1, (y / fy) | 0);
+      const inBox = b && mx >= b.x0 && mx < b.x1 && my >= b.y0 && my < b.y1;
+      for (let ch = 0; ch < 3; ch++) {
+        const cch = e.c === 1 ? 0 : ch;
+        let v = c.base[cch * npix + p];
+        if (inBox && u) v += step * u[cch * e.mh * e.mw + my * e.mw + mx];
+        im.data[4 * p + ch] = Math.max(0, Math.min(1, v)) * 255 * (b && !inBox ? 0.55 : 1);
       }
-      if (C === 1) rgb[1] = rgb[2] = rgb[0];
-      const dimf = masked ? 1 : 0.45;
-      im.data[4 * p] = rgb[0] * dimf; im.data[4 * p + 1] = rgb[1] * dimf;
-      im.data[4 * p + 2] = rgb[2] * dimf; im.data[4 * p + 3] = 255;
+      im.data[4 * p + 3] = 255;
     }
     off.getContext("2d").putImageData(im, 0, 0);
-    const scale = Math.min((w - 40) / W, (h - 40) / H);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(off, (w - W * scale) / 2, (h - H * scale) / 2, W * scale, H * scale);
+    ctx.imageSmoothingEnabled = e.kind !== "mnist";
+    ctx.drawImage(off, ox, oy, e.w * scale, e.h * scale);
+    if (b) {  // box outline
+      ctx.strokeStyle = "#ff8a7a";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(ox + b.x0 * fx * scale, oy + b.y0 * fy * scale,
+                     (b.x1 - b.x0) * fx * scale, (b.y1 - b.y0) * fy * scale);
+    }
+  }
+  function moveBoxTo(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const { e, scale, ox, oy } = view2d(rect.width, rect.height);
+    const x = (ev.clientX - rect.left - ox) / scale / (e.w / e.mw);
+    const y = (ev.clientY - rect.top - oy) / scale / (e.h / e.mh);
+    if (x < 0 || y < 0 || x > e.mw || y > e.mh) return;
+    st.box = { cx: x, cy: y, side: st.box ? st.box.side : defaultBox(e).side };
+    st.free2d = computeFree2d();
+    build(); draw();
+  }
+  function hover2d(ev) {
+    const tip = $("tip");
+    if (!imgs2.length) return tip.classList.add("hidden");
+    const rect = canvas.getBoundingClientRect();
+    const { e, scale, ox, oy } = view2d(rect.width, rect.height);
+    const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+    const x = ((mx - ox) / scale / (e.w / e.mw)) | 0, y = ((my - oy) / scale / (e.h / e.mh)) | 0;
+    if (x < 0 || y < 0 || x >= e.mw || y >= e.mh) return tip.classList.add("hidden");
+    const c = img2(st.img);
+    const s = c.sigmaMap[y * e.mw + x];
+    tip.innerHTML = `local σ <b>±${s.toFixed(3)}</b> ` +
+      `<span class="dim">(${(s / e.sigma).toFixed(2)}× noise)</span><br>` +
+      `<span class="dim">pixel (${(x * e.w / e.mw) | 0}, ${(y * e.h / e.mh) | 0})</span>`;
+    tip.style.left = (mx + 16) + "px"; tip.style.top = (my + 8) + "px";
+    tip.classList.remove("hidden");
   }
 
   function draw() {
@@ -626,11 +792,55 @@
     canvas.setPointerCapture(e.pointerId);
     if (st.osc) { st.osc = false;  // touching the canvas stops the auto-sweep
       $("osc").setAttribute("aria-pressed", "false"); }
+    if (st.tab === "2d") { dragp = "box"; moveBoxTo(e); return; }
     if (isPainting()) { dragp = "paint"; paintAt(e); return; }
     if (isMoving()) { dragp = "move"; moveMaskTo(e); return; }
     dragp = { x: e.clientX, y: e.clientY }; });
+  function hover3d(e) {
+    // tooltip: local confidence at the point under the cursor, in context
+    const tip = $("tip");
+    let r, base;
+    if (st.region === "free") { const f = freeFor(); if (!f) return tip.classList.add("hidden");
+      base = f.x_hat; r = st.freeRun; }
+    else { r = run3(); if (!r) return tip.classList.add("hidden");
+      base = clouds[r.cloud]; }
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const proj = proj3(rect.width, rect.height);
+    const n = base.length / 3;
+    let best = -1, bd = 14 * 14;
+    for (let i = 0; i < n; i++) {
+      const [px, py] = proj(base[3 * i], base[3 * i + 1], base[3 * i + 2]);
+      const d = (px - mx) ** 2 + (py - my) ** 2;
+      if (d < bd) { bd = d; best = i; }
+    }
+    if (best < 0) return tip.classList.add("hidden");
+    const lines = [];
+    const h = heatFor();
+    if (h) {
+      const s = h.std[best];
+      lines.push(`local σ <b>±${(s * 100).toFixed(2)}%</b> of shape ` +
+                 `<span class="dim">(${(s / st.sigma).toFixed(2)}× noise)</span>`);
+    }
+    if (r && r.mask_idx) {
+      const j = r.mask_idx.indexOf(best);
+      if (j >= 0 && r.modes && r.modes[st.mode] && r.modes[st.mode].length) {
+        const m = r.modes[st.mode];
+        const mag = Math.hypot(m[3 * j], m[3 * j + 1], m[3 * j + 2]);
+        lines.push(`this mode moves this point ` +
+                   `<b>±${(mag * Math.sqrt(Math.abs(r.eigvals[st.mode])) * 100).toFixed(2)}%</b>`);
+      }
+    }
+    if (!lines.length) return tip.classList.add("hidden");
+    tip.innerHTML = lines.join("<br>");
+    tip.style.left = (mx + 16) + "px";
+    tip.style.top = (my + 8) + "px";
+    tip.classList.remove("hidden");
+  }
+  canvas.addEventListener("pointerleave", () => $("tip").classList.add("hidden"));
   canvas.addEventListener("pointermove", e => {
-    if (!dragp || st.tab !== "3d") return;
+    if (!dragp) { if (st.tab === "3d") hover3d(e); else hover2d(e); return; }
+    if (st.tab !== "3d") { if (dragp === "box") { moveBoxTo(e); } return; }
     if (dragp === "paint") { paintAt(e); return; }
     if (dragp === "move") { moveMaskTo(e); return; }
     st.yaw += (e.clientX - dragp.x) * 0.008;
@@ -657,6 +867,11 @@
   $("brush").oninput = e => { st.brush = +e.target.value;
     if (isMoving() && st.maskCenter != null) {  // live-resize the region
       applyRegionAt(st.maskCenter); build(); draw();
+    }
+    if (st.tab === "2d" && st.box && imgs2.length) {  // resize the 2D box
+      const im = imgs2[st.img];
+      st.box.side = Math.max(6, Math.round(st.brush / 48 * 0.9 * Math.min(im.mw, im.mh)));
+      st.free2d = computeFree2d(); build(); draw();
     } };
   canvas.addEventListener("wheel", e => {
     if (st.tab !== "3d") return;
