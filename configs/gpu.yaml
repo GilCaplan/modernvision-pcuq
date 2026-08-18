@@ -31,6 +31,9 @@ spectrum:
   n_ev: 5
   iters: 15
   symmetrize: true
+  mask:                 # region-restricted modes (run_masked_modes.py)
+    n_regions: 3
+    frac: 0.2
 
 diagnostics:
   check_equivariance: true

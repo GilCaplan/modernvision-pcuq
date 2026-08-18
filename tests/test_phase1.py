@@ -70,6 +70,26 @@ def test_antisym_fd_matches_autograd_probe_for_symmetric_jacobian():
     assert antisym_energy_fd(den, y, V, c=1e-6) < 1e-8  # A symmetric -> ~0
 
 
+def test_masked_spectrum_matches_dense_restriction():
+    toy, den, y = _setup()
+    mask = torch.zeros(16, dtype=torch.bool)
+    mask[:8] = True
+    # Ground truth: eigendecomposition of the dense restricted operator M A M.
+    M = mask.to(torch.float64).repeat_interleave(3).diag()
+    dense = SIGMA**2 * (M @ den.A @ M)
+    true_vals, true_vecs = torch.linalg.eigh((dense + dense.T) / 2)
+    true_vals, idx = true_vals.sort(descending=True)
+    true_vecs = true_vecs[:, idx]
+
+    torch.manual_seed(0)
+    eigvecs, eigvals, _ = top_eigenpairs(den, y, SIGMA, k=3, iters=60,
+                                         method="central", c=1e-5, mask=mask)
+    assert torch.allclose(eigvals, true_vals[:3], rtol=1e-3)
+    assert (eigvecs[:, ~mask].abs() < 1e-12).all(), "eigvecs must vanish off-mask"
+    overlap = (eigvecs.reshape(3, -1) * true_vecs[:, :3].T.reshape(3, -1)).sum(1).abs()
+    assert (overlap > 0.999).all()
+
+
 class _PointwiseShrink(Denoiser):
     def denoise(self, y):
         return 0.5 * y
