@@ -15,6 +15,24 @@ Entry template:
 
 ---
 
+## 2026-08-18 — Viewer finalized: 9 images, draggable/resizable masks everywhere, review-agent audit
+**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** run_fullspectrum2d.py
+**What:** Iterated the viewer to its final form based on user feedback: (a) 2D tab is
+one chip per image — 5 MNIST digits *selected for recognizability* (min ‖x̂−x‖ per
+class over 400 test digits: labels 0/3/5/7/8) + 4 faces (213/227/34/514), each with a
+movable box mask (drag to move, corner handle to resize, saved per image), modes from
+rank-k whole-image spectra recomputed client-side; (b) 3D custom mask draggable (✋
+Move) with live recomputation; (c) hover tooltips with local per-point/pixel σ
+(±% · ×noise); (d) "model confidence" stat tile (calibrated/elevated/ambiguous badge).
+An independent review agent audited the page against the requirements: 12 findings
+(1 crash, 3 correctness) — all fixed, including a subtle heatmap index misalignment
+between separately-sampled clouds (nearest-neighbor align map). A Node DOM-shim
+click-sweep test now gates every publish. Fixed along the way: viewer init crash
+(tick before build), zsh word-splitting bug that silently dropped digit spectra.
+**Result:** published (same artifact URL), 9.3MB page, all data measured
+(outputs/fullspectrum2d, outputs/masked-grid*, outputs/fullspectrum).
+**Next:** the report.
+
 ## 2026-08-18 — Paint-your-own masks in the viewer (rank-24 client-side eigensolver)
 **Who:** Claude (with Rocky) · **Machine:** mac · **Config:** run_fullspectrum.py
 **What:** Free-form mask selection without server compute: precompute the top-24
