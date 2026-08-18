@@ -67,17 +67,17 @@ mode figures, metrics.json); VM setup is a copy-paste block in
 
 ## Open questions (move to LOG.md when resolved)
 
-- Autograd (`torch.func`) cannot trace their graph-pyramid ops → no exact-JVP
-  reference and no `Jᵀv` for the real model. Consequences: (a) step-size sweep needs
-  an autograd-free reference (Richardson / c-halving self-consistency); (b)
-  symmetrized operator unavailable — run plain `Jv` (the reference repo did the same)
-  and find another asymmetry probe.
-- Estimated top eigenvalues on the real model came out ~1.5σ² (an exact MMSE denoiser
-  bounds them by σ²) — finite-diff noise, or the model is locally expansive?
-  Investigate with a c-sweep and across shapes/σ.
-- On far-out-of-distribution input (toy Gaussian blob) the real model's top
-  |eigenvalues| are *negative* — non-PSD exactly as the proposal warned. Check
-  whether this persists on in-distribution ModelNet shapes (Phase 3).
+- ~~Autograd unavailable for the real model~~ → resolved: c-halving self-consistency
+  sweep (`sweep_step_size_fd`) + subspace asymmetry probe from forward passes only
+  (`antisym_energy_fd`).
+- ~~Negative / inflated eigenvalues, non-PSD covariance~~ → **root-caused and fixed**
+  (2026-08-17 frozen-graph LOG entry): the model rebuilds its voxel/neighbor graph
+  every forward, so unfrozen finite differences measure O(1) discrete jumps, not the
+  derivative. Freezing the anchor's graph pyramid (`freeze_graph: true`) makes the
+  spectra clean: positive, converged, near-symmetric.
+- Smooth-branch top eigenvalues sit at ~1.25–1.45σ², consistently but slightly above
+  the exact-MMSE bound σ². Amortized/blind training of the score model? Check trend
+  across σ and against their training noise range; discuss in the report.
 - Eigenvectors of the *full* 3N×3N Jacobian vs restricting to a region mask (the
   reference repo uses patch masks; our analog = subset of points).
 - Lanczos worth it over subspace iteration for k ≤ 5? (Probably not — decide by Phase 3.)

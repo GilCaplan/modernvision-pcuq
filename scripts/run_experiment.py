@@ -9,6 +9,7 @@ Usage (see docs/WORKFLOW.md — smoke locally before any GPU run):
 """
 
 import argparse
+import contextlib
 import json
 import sys
 import time
@@ -75,36 +76,44 @@ def main() -> None:
         # Symmetrization needs J^T v via autograd, which their ops don't support.
         symmetrize = sp["symmetrize"] and analytic
 
+        # Real model: differentiate the smooth branch (graph pyramid frozen at the
+        # anchor) — unfrozen finite differences are jump-dominated, see LOG.md.
+        freeze = (not analytic) and cfg["denoiser"]["freeze_graph"]
+
         for si, (name, x) in enumerate(shapes):
             t0 = time.time()
             x = x.to(device)
             y = corrupt(x[None], sigma, cfg["seed"] + si)[0].to(device)
-            with torch.no_grad():
-                x_hat = den(y[None])[0]
 
-            eigvecs, eigvals, history = top_eigenpairs(
-                den, y, sigma, k=sp["n_ev"], iters=sp["iters"],
-                method=jc["method"], c=jc["c"], symmetrize=symmetrize)
+            m = {}
+            if si == 0 and dg["check_equivariance"]:  # needs real graph rebuilds
+                m["equivariance_rel_err"] = check_equivariance(den, y)
 
-            m = {
-                "mse_noisy": float(((y - x) ** 2).mean()),
-                "mse_denoised": float(((x_hat - x) ** 2).mean()),
-                "eigvals": eigvals.cpu().tolist(),
-                "final_iter_overlap": history[-1].tolist(),
-                "psd": psd_report(eigvals.cpu()),
-                # asymmetry of J restricted to the reported uncertainty subspace
-                "antisym_energy_subspace": antisym_energy_fd(
-                    den, y, eigvecs, method=jc["method"], c=jc["c"]),
-                "seconds": time.time() - t0,
-            }
-            if si == 0:  # per-sigma diagnostics, once on the first shape
-                if dg["check_equivariance"]:
-                    m["equivariance_rel_err"] = check_equivariance(den, y)
-                sweep = sweep_step_size if analytic else sweep_step_size_fd
-                m["step_size_sweep"] = sweep(den, y, dg["step_size_sweep"],
-                                             method=jc["method"])
-                if analytic:
-                    m["antisym_energy_probes"] = antisym_energy(den, y)
+            with den.graph_frozen() if freeze else contextlib.nullcontext():
+                with torch.no_grad():
+                    x_hat = den(y[None])[0]  # anchor forward (fills the graph cache)
+
+                eigvecs, eigvals, history = top_eigenpairs(
+                    den, y, sigma, k=sp["n_ev"], iters=sp["iters"],
+                    method=jc["method"], c=jc["c"], symmetrize=symmetrize)
+
+                m.update({
+                    "mse_noisy": float(((y - x) ** 2).mean()),
+                    "mse_denoised": float(((x_hat - x) ** 2).mean()),
+                    "eigvals": eigvals.cpu().tolist(),
+                    "final_iter_overlap": history[-1].tolist(),
+                    "psd": psd_report(eigvals.cpu()),
+                    # asymmetry of J restricted to the uncertainty subspace
+                    "antisym_energy_subspace": antisym_energy_fd(
+                        den, y, eigvecs, method=jc["method"], c=jc["c"]),
+                })
+                if si == 0:  # per-sigma diagnostics, once on the first shape
+                    sweep = sweep_step_size if analytic else sweep_step_size_fd
+                    m["step_size_sweep"] = sweep(den, y, dg["step_size_sweep"],
+                                                 method=jc["method"])
+                    if analytic:
+                        m["antisym_energy_probes"] = antisym_energy(den, y)
+            m["seconds"] = time.time() - t0
 
             tag = f"{name}_sigma{sigma}"
             metrics[tag] = m

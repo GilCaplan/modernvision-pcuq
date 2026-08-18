@@ -15,6 +15,28 @@ Entry template:
 
 ---
 
+## 2026-08-17 — First real ModelNet results; graph-rebuild discontinuity found & fixed
+**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
+**What:** Ran the first real experiment locally (ModelNet40 downloaded in ~2 min):
+10 shapes (chair/airplane/table/lamp/guitar ×2) × σ∈{0.01,0.02,0.05} × 5 eigenpairs,
+~10s per run, `outputs/local/run_experiment/`. Results were bad in an instructive way:
+top eigenvalues 4–36× above the σ² MMSE bound, negative eigenvalues, subspace antisym
+energy ~0.4–0.5, poor convergence, and **no step-size plateau** (40–80% c-halving
+error everywhere). Diagnosis: the model rebuilds its voxel/radius graph every forward,
+so perturbed passes flip discrete assignments — finite differences measure O(1) jumps,
+not the local derivative.
+**Fix:** `Noise2Score3DWrapper.graph_frozen()` — freeze the anchor's graph pyramid
+(discrete indices + coarse-level positions), let only input points vary: differentiate
+the *smooth branch*. A/B on 5 shapes @ σ=0.02 (`outputs/local-frozen/run_experiment/`):
+eigvals all positive, tight 1.29–1.45σ² (was median 7σ², max 32σ²); overlaps ~0.99;
+antisym energy 0.001–0.017 (was ~0.4); sweep shows a clean U with plateau at c=1e-3
+(now the config default; error 2.2e-3 there). `freeze_graph: true` is the default in
+both profiles. Mode figures show localized structure (lamp arm / base as separate
+modes). Remaining anomaly: eigvals consistently ~1.3σ², slightly above the exact-MMSE
+bound — see PLAN.md open questions.
+**Next:** Full gpu.yaml sweep (VM or overnight Mac), quantitative eigval-vs-σ tables
+via `scripts/summarize_results.py`, mode-figure gallery for the report.
+
 ## 2026-08-17 — GPU-ready: ModelNet40 loader, full run_experiment pipeline, VM runbook
 **Who:** Claude (with Rocky) · **Machine:** mac · **Config:** configs/local.yaml
 **What:** Closed the gaps between "gates pass" and "VM can run the real experiment":
