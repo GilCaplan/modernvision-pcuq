@@ -15,6 +15,32 @@ Entry template:
 
 ---
 
+## 2026-08-18 — Faces fixed with exact gradients; corrections to two earlier claims
+**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** run_images2d + bp
+**What:** User reported the face tab showed no visible change. Root-caused and fixed.
+**Diagnosis chain:** (1) viewer rendering verified correct (replayed its exact math in
+Node); (2) face modes were computed with float32 central differences — noisy, and
+power iteration amplifies the noise into spiky directions; (3) switching to
+`torch.func` autograd silently crashed: guided_diffusion routes every UNet block
+through a custom `CheckpointFunction` that functorch can't trace and whose backward
+differentiates w.r.t. our frozen params. Fixes: runtime bypass of their checkpointing
+(no vendored edits) + new `bp` method in `jacobian.py` (plain reverse-mode `Jᵀv`,
+the reference repo's own backprop scheme). 13s/product on CPU.
+**Results (exact gradients):** t=400 (σ≈2.0, their demo regime): broad semantic
+modes — mouth λ₀=14.5=3.5σ² over ~1250 px (visible smile/expression morphing),
+eyes 1.2σ²; antisym ≤0.05; converged. t=100 (σ≈0.34): small localized modes
+(λ≈1.2–1.3σ²) — noise level controls uncertainty extent, matching their site.
+**Corrections to earlier entries:** (a) an earlier message reported t=100 face modes
+as "autograd-confirmed" — that run had crashed and stale finite-difference data was
+read; only now are face modes exact. (b) The MNIST "λ=172σ² multimodality" claim:
+with exact JVPs the top modes are 1–6 *single-pixel spikes* — a real pathology of
+their MNIST checkpoint's Jacobian, not digit-identity uncertainty; structured digit
+modes appear in lower modes (k=6 run). The Brascamp–Lieb point (σ² bound only for
+log-concave priors) stands mathematically; the t=400 mouth mode (3.5σ², broad,
+clean) is now the honest multimodality evidence.
+**Viewer:** republished (same URL) — 2D tab now has both noise levels with exact
+modes, display gain applies to images too.
+
 ## 2026-08-18 — Two-domain comparison: original method reproduced (MNIST + DDPM faces); viewer v2
 **Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** scripts + overrides
 **What:** Ran the reference paper's own domain through OUR pipeline (`denoisers2d.py`,
