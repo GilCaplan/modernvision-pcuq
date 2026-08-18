@@ -4,7 +4,7 @@
   :root {
     --ground: #14171c; --panel: #1c2129; --panel-2: #232a35;
     --ink: #e8eaf0; --muted: #8a93a6; --line: #2e3644;
-    --coral: #ff8a7a; --coral-dim: #a05a52; --blue: #3987e5;
+    --coral: #ff8a7a; --blue: #3987e5;
     --sans: "IBM Plex Sans", system-ui, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, monospace;
   }
@@ -13,20 +13,28 @@
   body { margin: 0; background: var(--ground); color: var(--ink);
          font-family: var(--sans); font-size: 14px; }
   .app { display: flex; flex-direction: column; height: 100vh; }
-  header { padding: 14px 20px 10px; border-bottom: 1px solid var(--line);
-           display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-  header h1 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: .01em; }
+  header { padding: 12px 20px 0; border-bottom: 1px solid var(--line); }
+  .head-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; font-weight: 600; margin: 0; }
   header p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .tabs { display: flex; gap: 2px; margin-top: 10px; }
+  .tab { border: 0; border-bottom: 2px solid transparent; background: none;
+         color: var(--muted); padding: 8px 14px; border-radius: 0; }
+  .tab[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--coral);
+                              background: none; }
   .main { display: flex; flex: 1; min-height: 0; }
-  aside { width: 272px; flex: none; overflow-y: auto; padding: 16px;
+  aside { width: 288px; flex: none; overflow-y: auto; padding: 16px;
           border-right: 1px solid var(--line); display: flex;
-          flex-direction: column; gap: 18px; background: var(--panel); }
-  .viewport { flex: 1; position: relative; min-width: 0; }
+          flex-direction: column; gap: 16px; background: var(--panel); }
+  .viewport { flex: 1; position: relative; min-width: 0; background: var(--ground); }
   canvas { position: absolute; inset: 0; width: 100%; height: 100%;
            touch-action: none; cursor: grab; }
-  canvas.dragging { cursor: grabbing; }
   .hint { position: absolute; right: 14px; bottom: 10px; color: var(--muted);
           font-size: 11.5px; pointer-events: none; }
+  .legend { position: absolute; left: 14px; bottom: 10px; color: var(--muted);
+            font-size: 11.5px; pointer-events: none; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+              margin: 0 4px 0 10px; }
   .group-label { font-size: 10.5px; text-transform: uppercase;
                  letter-spacing: .09em; color: var(--muted); margin: 0 0 8px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -37,53 +45,66 @@
   button:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
   button[aria-pressed="true"] { background: var(--blue); border-color: var(--blue);
                                 color: #fff; }
-  .mode-btn { display: flex; justify-content: space-between; width: 100%;
-              gap: 10px; }
+  .mode-btn { display: flex; justify-content: space-between; width: 100%; gap: 10px; }
   .mode-btn .lam { font-family: var(--mono); font-size: 12px; color: var(--muted); }
   .mode-btn[aria-pressed="true"] .lam { color: #eaf2ff; }
   .modes { display: flex; flex-direction: column; gap: 6px; }
   .slider-row { display: flex; align-items: center; gap: 10px; }
   input[type="range"] { flex: 1; accent-color: var(--coral); }
-  input[type="range"]:focus-visible { outline: 2px solid var(--blue); }
-  .t-readout { font-family: var(--mono); font-size: 12.5px; width: 74px;
+  .t-readout { font-family: var(--mono); font-size: 12.5px; min-width: 64px;
                text-align: right; font-variant-numeric: tabular-nums; }
-  .toggles { display: flex; flex-direction: column; gap: 8px; }
   .toggles label { display: flex; align-items: center; gap: 8px; cursor: pointer;
-                   color: var(--ink); }
+                   margin-top: 8px; }
   .toggles input { accent-color: var(--blue); }
   .readout { font-family: var(--mono); font-size: 12px; color: var(--muted);
              line-height: 1.75; border-top: 1px solid var(--line); padding-top: 12px; }
   .readout b { color: var(--ink); font-weight: 500; }
+  .hidden { display: none !important; }
   @media (max-width: 760px) {
     .main { flex-direction: column; }
     aside { width: 100%; border-right: 0; border-bottom: 1px solid var(--line);
-            max-height: 45vh; }
+            max-height: 46vh; }
   }
 </style>
 <div class="app">
   <header>
-    <h1>Uncertainty Mode Explorer</h1>
-    <p>Posterior uncertainty of a frozen point-cloud denoiser — pick a shape and
-       region, choose a mode, and sweep x&#770; + t·&radic;&lambda;·v.</p>
+    <div class="head-row">
+      <h1>Uncertainty Mode Explorer</h1>
+      <p>Posterior uncertainty from a frozen denoiser's Jacobian — sweep
+         x&#770; + t&middot;&radic;&lambda;&middot;v along measured eigenvectors.</p>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab" id="tab3d" aria-pressed="true">3D point clouds — our extension</button>
+      <button class="tab" id="tab2d" aria-pressed="false">2D images — original method's domain</button>
+    </div>
   </header>
   <div class="main">
     <aside>
-      <div><p class="group-label">Shape</p><div class="chips" id="shapes"></div></div>
-      <div><p class="group-label">Noise level &sigma;</p><div class="chips" id="sigmas"></div></div>
+      <div id="g-shape"><p class="group-label">Shape</p><div class="chips" id="shapes"></div></div>
+      <div id="g-sigma"><p class="group-label">Noise level &sigma;</p><div class="chips" id="sigmas"></div></div>
+      <div id="g-region"><p class="group-label">Region (move the mask)</p><div class="chips" id="regions"></div></div>
+      <div id="g-method"><p class="group-label">Estimator</p><div class="chips" id="methods"></div></div>
+      <div id="g-run2d" class="hidden"><p class="group-label">Image</p><div class="chips" id="runs2d"></div></div>
       <div><p class="group-label">Mode &middot; eigenvalue &lambda;</p><div class="modes" id="modes"></div></div>
       <div>
         <p class="group-label">Sweep t (units of &radic;&lambda;)</p>
         <div class="slider-row">
-          <input type="range" id="t" min="-3" max="3" step="0.05" value="0"
-                 aria-label="sweep amount t">
-          <span class="t-readout" id="tval">t = 0.00</span>
+          <input type="range" id="t" min="-3" max="3" step="0.05" value="0" aria-label="sweep amount t">
+          <span class="t-readout" id="tval">t=0.00</span>
         </div>
         <div class="slider-row" style="margin-top:8px">
           <button id="osc" aria-pressed="false">Oscillate</button>
           <button id="reset">Reset t</button>
         </div>
       </div>
-      <div class="toggles">
+      <div id="g-amp">
+        <p class="group-label">Display gain (physical scale is &radic;&lambda;)</p>
+        <div class="slider-row">
+          <input type="range" id="amp" min="1" max="10" step="1" value="1" aria-label="display gain">
+          <span class="t-readout" id="ampval">&times;1</span>
+        </div>
+      </div>
+      <div class="toggles" id="g-toggles">
         <p class="group-label" style="margin-bottom:0">Display</p>
         <label><input type="checkbox" id="dimctx" checked> Dim points outside the region</label>
         <label><input type="checkbox" id="ghost" checked> Ghost of the t&thinsp;=&thinsp;0 position</label>
@@ -93,179 +114,243 @@
     </aside>
     <div class="viewport">
       <canvas id="c"></canvas>
-      <div class="hint">drag to rotate &middot; scroll to zoom</div>
+      <div class="legend" id="legend"></div>
+      <div class="hint" id="hint">drag to rotate &middot; scroll to zoom</div>
     </div>
   </div>
 </div>
-<script>const DATA=/*__DATA__*/;</script>
+<script>const DATA3D=/*__DATA3D__*/;const DATA2D=/*__DATA2D__*/;</script>
 <script>
 (() => {
-  const runs = DATA.runs;
-  const canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
   const $ = id => document.getElementById(id);
+  const canvas = $("c"), ctx = canvas.getContext("2d");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const runs3 = DATA3D.runs, clouds = DATA3D.clouds, runs2 = DATA2D.runs;
 
-  const state = { shape: runs[0].shape, sigma: null, mode: 0, t: 0,
-                  yaw: 0.7, pitch: -0.35, zoom: 1, osc: false, spin: !reduced,
-                  dimctx: true, ghost: true };
-  $("spin").checked = state.spin;
+  const st = { tab: "3d", shape: runs3[0].shape, sigma: null, region: null,
+               method: "frozen", run2: 0, mode: 0, t: 0, amp: 4,
+               yaw: 0.7, pitch: -0.35, zoom: 1,
+               osc: !reduced, spin: false, dimctx: true, ghost: true };
+  $("spin").checked = st.spin;
+  $("amp").value = st.amp; $("ampval").innerHTML = "&times;" + st.amp;
+  $("osc").setAttribute("aria-pressed", String(st.osc));
 
-  const shapes = [...new Set(runs.map(r => r.shape))];
-  const sigmasFor = s => [...new Set(runs.filter(r => r.shape === s)
-                          .map(r => r.sigma))].sort((a, b) => a - b);
-  const run = () => runs.find(r => r.shape === state.shape && r.sigma === state.sigma);
+  const shapes = [...new Set(runs3.map(r => r.shape))];
+  const sigmasFor = s => [...new Set(runs3.filter(r => r.shape === s).map(r => r.sigma))].sort((a, b) => a - b);
+  const methodsFor = (s, g) => [...new Set(runs3.filter(r => r.shape === s && r.sigma === g)
+                                    .map(r => r.method || "frozen"))].sort();
+  const regionsFor = (s, g, me) => runs3.filter(r => r.shape === s && r.sigma === g
+                                    && (r.method || "frozen") === me)
+                                    .sort((a, b) => a.region - b.region);
+  const run3 = () => runs3.find(r => r.shape === st.shape && r.sigma === st.sigma
+                                     && (r.method || "frozen") === st.method
+                                     && r.region === st.region);
+  const cur = () => st.tab === "3d" ? run3() : runs2[st.run2];
 
-  let P = null; // prepared geometry for the current run
-  function prepare() {
-    const r = run(), n = r.mask.length;
-    const maskIdx = []; r.mask.forEach((m, i) => { if (m) maskIdx.push(i); });
-    P = { r, n, maskIdx,
-          base: r.x_hat,                       // flat [x,y,z]*n
-          mode: r.modes[state.mode],           // flat, masked points only
-          mags: null, magMax: 1e-30 };
-    P.mags = maskIdx.map((_, j) => Math.hypot(P.mode[3 * j], P.mode[3 * j + 1],
-                                              P.mode[3 * j + 2]));
-    P.magMax = Math.max(...P.mags, 1e-30);
-  }
-
-  function chips(el, items, fmt, get, set) {
-    el.replaceChildren(...items.map(v => {
+  function chips(el, items, fmt, isOn, set) {
+    el.replaceChildren(...items.map((v, i) => {
       const b = document.createElement("button");
-      b.textContent = fmt(v);
-      b.setAttribute("aria-pressed", String(get() === v));
-      b.onclick = () => { set(v); render(); };
+      b.innerHTML = fmt(v, i);
+      b.setAttribute("aria-pressed", String(isOn(v, i)));
+      b.onclick = () => { set(v, i); build(); draw(); };
       return b;
     }));
   }
-  function buildControls() {
-    if (!sigmasFor(state.shape).includes(state.sigma))
-      state.sigma = sigmasFor(state.shape)[0];
-    chips($("shapes"), shapes, v => v.replace(/_/g, " "),
-          () => state.shape, v => { state.shape = v; buildControls(); });
-    chips($("sigmas"), sigmasFor(state.shape), v => "σ = " + v,
-          () => state.sigma, v => { state.sigma = v; buildControls(); });
-    const r = run();
-    if (state.mode >= r.eigvals.length) state.mode = 0;
+
+  function build() {
+    const is3d = st.tab === "3d";
+    ["g-shape", "g-sigma", "g-region", "g-method", "g-amp", "g-toggles"].forEach(
+      id => $(id).classList.toggle("hidden", !is3d));
+    $("g-run2d").classList.toggle("hidden", is3d);
+    $("hint").classList.toggle("hidden", !is3d);
+    let r;
+    if (is3d) {
+      if (!sigmasFor(st.shape).includes(st.sigma)) st.sigma = sigmasFor(st.shape)[0];
+      const meths = methodsFor(st.shape, st.sigma);
+      if (!meths.includes(st.method)) st.method = meths.includes("frozen") ? "frozen" : meths[0];
+      const regs = regionsFor(st.shape, st.sigma, st.method);
+      if (!regs.some(x => x.region === st.region)) st.region = regs[0].region;
+      chips($("shapes"), shapes, v => v.replace(/_/g, " "),
+            v => v === st.shape, v => { st.shape = v; });
+      chips($("sigmas"), sigmasFor(st.shape), v => "σ = " + v,
+            v => v === st.sigma, v => { st.sigma = v; });
+      chips($("methods"), meths,
+            v => v === "frozen" ? "ours — frozen graph" : "naive baseline port",
+            v => v === st.method, v => { st.method = v; });
+      chips($("regions"), regs,
+            v => `r${v.region}<span style="color:${v.region===st.region?'#eaf2ff':'var(--muted)'};font-size:11px"> ·${v.mask_idx.length}p${(v.psd_ok && v.conv_ok !== false) ? "" : " ⚠"}</span>`,
+            v => v.region === st.region, v => { st.region = v.region; });
+      r = run3();
+      $("legend").innerHTML = `<i style="background:var(--coral)"></i>mask (selected region)` +
+        `<i style="background:#747f94"></i>rest of shape<i style="background:rgba(255,138,122,.3)"></i>ghost t=0`;
+    } else {
+      chips($("runs2d"), runs2, v => v.kind === "mnist" ? `digit ${v.label}` : `face · ${v.label}`,
+            (v, i) => i === st.run2, (v, i) => { st.run2 = i; });
+      r = runs2[st.run2];
+      $("legend").textContent = "region outside the mask is dimmed";
+    }
+    if (st.mode >= r.eigvals.length) st.mode = 0;
     $("modes").replaceChildren(...r.eigvals.map((lam, i) => {
       const b = document.createElement("button");
       b.className = "mode-btn";
-      b.setAttribute("aria-pressed", String(state.mode === i));
-      b.innerHTML = `<span>mode ${i}</span><span class="lam">λ = ${lam.toExponential(2)}</span>`;
-      b.onclick = () => { state.mode = i; buildControls(); render(); };
+      b.setAttribute("aria-pressed", String(st.mode === i));
+      b.innerHTML = `<span>mode ${i}</span><span class="lam">λ=${lam.toExponential(2)} · ${(lam / (r.sigma * r.sigma)).toFixed(1)}σ²</span>`;
+      b.onclick = () => { st.mode = i; build(); draw(); };
       return b;
     }));
-    const spread = Math.round(r.spread * 100);
-    $("readout").innerHTML =
-      `run <b>${r.tag}</b><br>` +
-      `region <b>r${r.region}</b> · <b>${r.mask.reduce((a, b) => a + b, 0)}</b> of ${r.mask.length} points<br>` +
-      `eigenvalue spread <b>${spread}%</b><br>` +
-      `σ² bound <b>${(r.sigma * r.sigma).toExponential(2)}</b><br><br>` +
-      `Measured data: ModelNet40 test shape,<br>denoised by frozen Noise2Score3D;<br>` +
-      `modes from subspace iteration on its<br>Jacobian (outputs/masked/masked_modes).`;
-    prepare();
+    const naiveWarn = st.method === "naive"
+      ? `<br><b style="color:var(--coral)">baseline port:</b> graph rebuilt every<br>forward — finite differences measure<br>discrete jumps. ` +
+        `${r.conv_ok === false ? "NOT converged. " : ""}${r.psd_ok ? "" : "Negative eigvals. "}<br>Compare with "ours — frozen graph".`
+      : "";
+    const prov = is3d
+      ? `run <b>${r.tag}</b><br>mask <b>${r.mask_idx.length}</b> pts · spread <b>${Math.round(r.spread * 100)}%</b>` +
+        (r.psd_ok ? "" : `<br>⚠ smallest eigval &lt; 0 (non-PSD)`) +
+        (r.conv_ok === false ? `<br>⚠ subspace iteration did not converge` : "") +
+        naiveWarn +
+        `<br><br>Measured: ModelNet40 shape, frozen<br>Noise2Score3D, subspace iteration<br>(outputs/masked-grid*).`
+      : `run <b>${r.tag}</b><br>σ = <b>${r.sigma}</b> · λ₀/σ² = <b>${(r.eigvals[0] / (r.sigma * r.sigma)).toFixed(1)}</b>` +
+        `<br><br>Measured: the reference repo's own<br>${r.kind === "mnist" ? "MNIST CNN" : "DDPM FFHQ"} denoiser, run through<br>OUR pipeline (outputs/images2d).`;
+    $("readout").innerHTML = prov;
   }
 
-  function project(x, y, z, cy, sy, cp, sp) {
-    const x1 = cy * x + sy * z, z1 = -sy * x + cy * z;
-    return [x1, cp * y - sp * z1, sp * y + cp * z1];
-  }
-  const lerp = (a, b, u) => a + (b - a) * u;
-  function coral(u, depth) { // magnitude u in [0,1], depth shade in [0,1]
-    const r = lerp(160, 255, u), g = lerp(90, 138, u), b = lerp(82, 122, u);
-    const d = lerp(0.55, 1, depth);
-    return `rgb(${r * d | 0},${g * d | 0},${b * d | 0})`;
-  }
-  function draw() {
-    const w = canvas.clientWidth, h = canvas.clientHeight, dpr = devicePixelRatio || 1;
-    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#14171c"; ctx.fillRect(0, 0, w, h);
-    if (!P) return;
-    const s = 0.42 * Math.min(w, h) * state.zoom, cx = w / 2, cyy = h / 2;
-    const cy = Math.cos(state.yaw), sy = Math.sin(state.yaw);
-    const cp = Math.cos(state.pitch), sp = Math.sin(state.pitch);
-    const step = state.t * Math.sqrt(Math.max(P.r.eigvals[state.mode], 0));
+  // ---------- 3D rendering ----------
+  function draw3d(w, h) {
+    const r = run3(), base = clouds[r.cloud], n = base.length / 3;
+    const inR = new Int32Array(n).fill(-1);
+    r.mask_idx.forEach((p, j) => inR[p] = j);
+    const mode = r.modes[st.mode];
+    const mags = r.mask_idx.map((_, j) => Math.hypot(mode[3 * j], mode[3 * j + 1], mode[3 * j + 2]));
+    const magMax = Math.max(...mags, 1e-30);
+    const s = 0.42 * Math.min(w, h) * st.zoom, cx = w / 2, cyy = h / 2;
+    const cy = Math.cos(st.yaw), sy = Math.sin(st.yaw);
+    const cp = Math.cos(st.pitch), sp = Math.sin(st.pitch);
+    const step = st.t * st.amp * Math.sqrt(Math.abs(r.eigvals[st.mode]));
     const pts = [];
-    const inRegion = new Array(P.n).fill(-1);
-    P.maskIdx.forEach((i, j) => inRegion[i] = j);
-    for (let i = 0; i < P.n; i++) {
-      let x = P.base[3 * i], y = P.base[3 * i + 1], z = P.base[3 * i + 2];
-      const j = inRegion[i];
-      if (j >= 0 && state.ghost && Math.abs(state.t) > 0.05) {
-        const [gx, gy, gz] = project(x, y, z, cy, sy, cp, sp);
-        pts.push({ x: cx + s * gx, y: cyy - s * gy, z: gz, kind: 2, u: 0 });
+    const proj = (x, y, z) => {
+      const x1 = cy * x + sy * z, z1 = -sy * x + cy * z;
+      return [x1, cp * y - sp * z1, sp * y + cp * z1];
+    };
+    for (let i = 0; i < n; i++) {
+      let x = base[3 * i], y = base[3 * i + 1], z = base[3 * i + 2];
+      const j = inR[i];
+      if (j >= 0 && st.ghost && Math.abs(st.t) > 0.05) {
+        const [gx, gy, gz] = proj(x, y, z);
+        pts.push({ x: cx + s * gx, y: cyy - s * gy, z: gz, k: 2, u: 0 });
       }
-      if (j >= 0) {
-        x += step * P.mode[3 * j]; y += step * P.mode[3 * j + 1];
-        z += step * P.mode[3 * j + 2];
-      }
-      const [px, py, pz] = project(x, y, z, cy, sy, cp, sp);
-      pts.push({ x: cx + s * px, y: cyy - s * py, z: pz,
-                 kind: j >= 0 ? 1 : 0, u: j >= 0 ? P.mags[j] / P.magMax : 0 });
+      if (j >= 0) { x += step * mode[3 * j]; y += step * mode[3 * j + 1]; z += step * mode[3 * j + 2]; }
+      const [px, py, pz] = proj(x, y, z);
+      pts.push({ x: cx + s * px, y: cyy - s * py, z: pz, k: j >= 0 ? 1 : 0,
+                 u: j >= 0 ? mags[j] / magMax : 0 });
     }
     pts.sort((a, b) => a.z - b.z);
+    const lerp = (a, b, u) => a + (b - a) * u;
     for (const p of pts) {
-      const depth = Math.min(1, Math.max(0, 0.5 + p.z * 0.6));
-      if (p.kind === 2) { ctx.fillStyle = "rgba(255,138,122,0.16)"; }
-      else if (p.kind === 1) { ctx.fillStyle = coral(p.u, depth); }
-      else {
-        const d = lerp(0.5, 1, depth), dim = state.dimctx ? 0.45 : 0.9;
-        ctx.fillStyle = `rgba(${116 * d | 0},${127 * d | 0},${148 * d | 0},${dim})`;
+      const d = Math.min(1, Math.max(0, 0.5 + p.z * 0.6));
+      if (p.k === 2) ctx.fillStyle = "rgba(255,138,122,0.16)";
+      else if (p.k === 1) {
+        const br = lerp(0.55, 1, d);
+        ctx.fillStyle = `rgb(${lerp(160, 255, p.u) * br | 0},${lerp(90, 138, p.u) * br | 0},${lerp(82, 122, p.u) * br | 0})`;
+      } else {
+        const dd = lerp(0.5, 1, d);
+        ctx.fillStyle = `rgba(${116 * dd | 0},${127 * dd | 0},${148 * dd | 0},${st.dimctx ? 0.45 : 0.9})`;
       }
-      const rad = (p.kind === 1 ? 2.3 : 1.7) * lerp(0.75, 1.15, depth);
-      ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 6.2832); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, (p.k === 1 ? 2.3 : 1.7) * lerp(0.75, 1.15, d), 0, 6.2832);
+      ctx.fill();
     }
   }
 
-  function render() { draw(); }
-  let last = performance.now();
-  function tick(now) {
-    const dt = (now - last) / 1000; last = now;
-    let moving = false;
-    if (state.spin) { state.yaw += dt * 0.35; moving = true; }
-    if (state.osc) {
-      state.t = 3 * Math.sin(now / 900);
-      $("t").value = state.t; $("tval").textContent = "t = " + state.t.toFixed(2);
-      moving = true;
+  // ---------- 2D rendering ----------
+  const off = document.createElement("canvas");
+  function draw2d(w, h) {
+    const r = runs2[st.run2], C = r.c, H = r.h, W = r.w, npix = H * W;
+    off.width = W; off.height = H;
+    const im = off.getContext("2d").createImageData(W, H);
+    const step = st.t * Math.sqrt(Math.max(r.eigvals[st.mode], 0));
+    const mode = r.modes[st.mode];
+    const inM = new Int32Array(C * npix).fill(-1);
+    let mi = 0;
+    for (let e = 0; e < C * npix; e++) if (r.mask[e]) inM[e] = mi++;
+    const lo = r.kind === "ffhq" ? -1 : 0, span = r.kind === "ffhq" ? 2 : 1;
+    for (let p = 0; p < npix; p++) {
+      let masked = false;
+      const rgb = [0, 0, 0];
+      for (let ch = 0; ch < C; ch++) {
+        const e = ch * npix + p;
+        let v = r.x_hat[e];
+        if (inM[e] >= 0) { v += step * mode[inM[e]]; masked = true; }
+        rgb[ch] = Math.max(0, Math.min(1, (v - lo) / span)) * 255;
+      }
+      if (C === 1) rgb[1] = rgb[2] = rgb[0];
+      const dimf = masked ? 1 : 0.45;
+      im.data[4 * p] = rgb[0] * dimf; im.data[4 * p + 1] = rgb[1] * dimf;
+      im.data[4 * p + 2] = rgb[2] * dimf; im.data[4 * p + 3] = 255;
     }
-    if (moving) draw();
-    requestAnimationFrame(tick);
+    off.getContext("2d").putImageData(im, 0, 0);
+    const scale = Math.min((w - 40) / W, (h - 40) / H);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, (w - W * scale) / 2, (h - H * scale) / 2, W * scale, H * scale);
   }
 
-  // controls
-  $("t").oninput = e => { state.t = +e.target.value; state.osc = false;
-    $("osc").setAttribute("aria-pressed", "false");
-    $("tval").textContent = "t = " + state.t.toFixed(2); draw(); };
-  $("osc").onclick = () => { state.osc = !state.osc;
-    $("osc").setAttribute("aria-pressed", String(state.osc)); };
-  $("reset").onclick = () => { state.t = 0; state.osc = false;
-    $("osc").setAttribute("aria-pressed", "false");
-    $("t").value = 0; $("tval").textContent = "t = 0.00"; draw(); };
-  $("dimctx").onchange = e => { state.dimctx = e.target.checked; draw(); };
-  $("ghost").onchange = e => { state.ghost = e.target.checked; draw(); };
-  $("spin").onchange = e => { state.spin = e.target.checked; };
+  function draw() {
+    const w = canvas.clientWidth, h = canvas.clientHeight, dpr = devicePixelRatio || 1;
+    if (canvas.width !== (w * dpr | 0)) { canvas.width = w * dpr; canvas.height = h * dpr; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = "#14171c"; ctx.fillRect(0, 0, w, h);
+    if (st.tab === "3d") draw3d(w, h); else draw2d(w, h);
+  }
 
-  let drag = null;
+  // ---------- controls ----------
+  function setTab(tab) {
+    st.tab = tab;
+    $("tab3d").setAttribute("aria-pressed", String(tab === "3d"));
+    $("tab2d").setAttribute("aria-pressed", String(tab === "2d"));
+    build(); draw();
+  }
+  $("tab3d").onclick = () => setTab("3d");
+  $("tab2d").onclick = () => setTab("2d");
+  $("t").oninput = e => { st.t = +e.target.value; st.osc = false;
+    $("osc").setAttribute("aria-pressed", "false");
+    $("tval").textContent = "t=" + st.t.toFixed(2); draw(); };
+  $("osc").onclick = () => { st.osc = !st.osc;
+    $("osc").setAttribute("aria-pressed", String(st.osc)); };
+  $("reset").onclick = () => { st.t = 0; st.osc = false; $("t").value = 0;
+    $("osc").setAttribute("aria-pressed", "false");
+    $("tval").textContent = "t=0.00"; draw(); };
+  $("amp").oninput = e => { st.amp = +e.target.value;
+    $("ampval").innerHTML = "&times;" + st.amp; draw(); };
+  $("dimctx").onchange = e => { st.dimctx = e.target.checked; draw(); };
+  $("ghost").onchange = e => { st.ghost = e.target.checked; draw(); };
+  $("spin").onchange = e => { st.spin = e.target.checked; };
+
+  let dragp = null;
   canvas.addEventListener("pointerdown", e => {
-    drag = { x: e.clientX, y: e.clientY }; canvas.classList.add("dragging");
-    canvas.setPointerCapture(e.pointerId);
-  });
+    dragp = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
   canvas.addEventListener("pointermove", e => {
-    if (!drag) return;
-    state.yaw += (e.clientX - drag.x) * 0.008;
-    state.pitch = Math.max(-1.4, Math.min(1.4, state.pitch + (e.clientY - drag.y) * 0.008));
-    drag = { x: e.clientX, y: e.clientY }; draw();
-  });
-  canvas.addEventListener("pointerup", () => { drag = null; canvas.classList.remove("dragging"); });
+    if (!dragp || st.tab !== "3d") return;
+    st.yaw += (e.clientX - dragp.x) * 0.008;
+    st.pitch = Math.max(-1.4, Math.min(1.4, st.pitch + (e.clientY - dragp.y) * 0.008));
+    dragp = { x: e.clientX, y: e.clientY }; draw(); });
+  canvas.addEventListener("pointerup", () => dragp = null);
   canvas.addEventListener("wheel", e => {
+    if (st.tab !== "3d") return;
     e.preventDefault();
-    state.zoom = Math.max(0.4, Math.min(3.5, state.zoom * (e.deltaY < 0 ? 1.08 : 0.93)));
+    st.zoom = Math.max(0.4, Math.min(3.5, st.zoom * (e.deltaY < 0 ? 1.08 : 0.93)));
     draw();
   }, { passive: false });
   new ResizeObserver(draw).observe(canvas);
 
-  buildControls();
-  draw();
-  requestAnimationFrame(tick);
+  let last = performance.now();
+  (function tick(now) {
+    const dt = (now - last) / 1000; last = now;
+    let moving = false;
+    if (st.tab === "3d" && st.spin) { st.yaw += dt * 0.35; moving = true; }
+    if (st.osc) { st.t = 3 * Math.sin(now / 900); $("t").value = st.t;
+      $("tval").textContent = "t=" + st.t.toFixed(2); moving = true; }
+    if (moving) draw();
+    requestAnimationFrame(tick);
+  })(last);
+
+  build(); draw();
 })();
 </script>

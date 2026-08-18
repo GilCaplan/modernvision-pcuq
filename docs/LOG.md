@@ -15,6 +15,30 @@ Entry template:
 
 ---
 
+## 2026-08-18 — Two-domain comparison: original method reproduced (MNIST + DDPM faces); viewer v2
+**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** scripts + overrides
+**What:** Ran the reference paper's own domain through OUR pipeline (`denoisers2d.py`,
+`run_images2d.py`; `spectrum` masks generalized to image shapes): their bundled MNIST
+CNN and their DDPM FFHQ denoiser (ffhq.pt, 2.2GB, from ddpm-segmentation). Also ran
+the naive-port baseline on the 6-region mask grid, and rebuilt the interactive viewer.
+**Results:**
+- **MNIST:** digit-identity modes with λ up to 172σ², perfectly converged —
+  reproduces the paper's multimodality behavior and **corrects our framing: σ² is a
+  bound only for log-concave priors (Brascamp–Lieb); real multimodal data may
+  legitimately exceed it.** The 3D 1.4–1.9σ² values may be genuine geometric
+  ambiguity, not miscalibration. (One digit showed antisym 0.82 — near-boundary
+  pathology, worth a report footnote.)
+- **DDPM faces (eyes/mouth masks, t=100):** semantically meaningful modes — eyebrow
+  position/thickness, eye shape — the paper's signature figure from our code
+  (`outputs/images2d/ffhq/`).
+- **Naive-baseline mask grid (30 regions, σ=0.03):** 3/30 converged, 11 with
+  negative eigenvals, median λ₀ 4σ² — vs ours 51/60 converged. The frozen-graph
+  contribution as a per-region A/B.
+- **Viewer v2 (same artifact URL):** two tabs (3D ours / 2D original domain),
+  6 movable region masks per shape, estimator toggle (ours vs naive), display-gain
+  slider, oscillation on by default, legends + provenance.
+**Next:** report writing; fold the log-concavity correction into results/README.
+
 ## 2026-08-18 — Comprehensive evidence set complete; results/ folder built
 **Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
 **What:** Three background runs to make the report evidence comprehensive, plus a
