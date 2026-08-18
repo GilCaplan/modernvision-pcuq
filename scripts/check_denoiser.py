@@ -35,8 +35,9 @@ def main() -> None:
     cfg = apply_overrides(load_config(args.config), args.override)
     set_seed(cfg["seed"])
     device = get_device(cfg)
-    if device.type == "mps":
-        # Their scatter/graph ops are unverified on MPS; CPU is the safe Mac path.
+    if device.type == "mps" and cfg["device"] == "auto":
+        # Measured: MPS works but is ~1.4x slower than CPU for this graph-heavy
+        # model. auto prefers CPU; explicit device: mps is honored.
         device = torch.device("cpu")
     out = make_out_dir(cfg, "check_denoiser")
     sigma = cfg["data"]["sigmas"][0]

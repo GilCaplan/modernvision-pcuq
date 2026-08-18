@@ -15,6 +15,21 @@ Entry template:
 
 ---
 
+## 2026-08-17 — MPS measured: works, but slower than CPU for the real model
+**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**What:** Tested whether the real denoiser can use Apple's GPU (MPS) instead of CPU.
+Required generalizing the `.cuda()` shim from "no-op" to "redirect to the wrapper's
+device" (also fixed a shim bug: second wrapper construction crashed on the spec-less
+pykeops stub). No `PYTORCH_ENABLE_MPS_FALLBACK` needed.
+**Result (N=2048, 5-forward average):** CPU 244 ms/forward, MPS 344 ms/forward —
+MPS is ~1.4× *slower*: this KPConv pipeline is many small irregular kernels
+(radius search, gather/scatter, pack-mode reshapes), which MPS launch overhead
+dominates; Apple GPUs win on big dense matmuls, not this. Outputs agree to ~3% of
+output std (kernel differences). Policy: `device: auto` picks CPU for the real model
+(explicit `device: mps` is honored); the analytic/toy path keeps using MPS, where its
+dense matmuls do win.
+**Next:** —
+
 ## 2026-08-17 — First real ModelNet results; graph-rebuild discontinuity found & fixed
 **Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
 **What:** Ran the first real experiment locally (ModelNet40 downloaded in ~2 min):

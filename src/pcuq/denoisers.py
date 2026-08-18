@@ -49,15 +49,16 @@ class AnalyticGaussianDenoiser(Denoiser):
 
 
 @contextlib.contextmanager
-def _cuda_calls_noop_without_cuda():
+def _cuda_calls_redirected(device: torch.device):
     """The vendored Noise2Score3D code hardcodes .cuda() in layer constructors and
-    helpers. Inside this context, Tensor.cuda() is a no-op when CUDA is unavailable
-    (Mac), and untouched when it is (GPU VM) — the vendored files stay unedited."""
+    runtime helpers. Inside this context, Tensor.cuda() means "move to `device`"
+    when CUDA is unavailable (Mac: cpu or mps), and is untouched when CUDA exists
+    (GPU VM) — the vendored files stay unedited."""
     if torch.cuda.is_available():
         yield
         return
     orig = torch.Tensor.cuda
-    torch.Tensor.cuda = lambda self, *a, **k: self
+    torch.Tensor.cuda = lambda self, *a, **k: self.to(device)
     try:
         yield
     finally:
@@ -84,16 +85,18 @@ def _torch_knn(q_points, s_points, k):
 def _shim_pykeops_if_missing() -> bool:
     """Their knn.py imports pykeops at module level. If pykeops isn't installed,
     register an empty stand-in so the import succeeds; the caller must then swap
-    keops_knn for _torch_knn. Returns True if the shim was applied."""
+    keops_knn for _torch_knn. Returns True if the shim is in place."""
+    if "pykeops" in sys.modules:  # find_spec would choke on our spec-less stub
+        return getattr(sys.modules["pykeops"], "_pcuq_shim", False)
     if importlib.util.find_spec("pykeops") is not None:
         return False
-    if "pykeops" not in sys.modules:
-        pk = types.ModuleType("pykeops")
-        pk_torch = types.ModuleType("pykeops.torch")
-        pk_torch.LazyTensor = None  # imported by name, unused once keops_knn is swapped
-        pk.torch = pk_torch
-        sys.modules["pykeops"] = pk
-        sys.modules["pykeops.torch"] = pk_torch
+    pk = types.ModuleType("pykeops")
+    pk._pcuq_shim = True
+    pk_torch = types.ModuleType("pykeops.torch")
+    pk_torch.LazyTensor = None  # imported by name, unused once keops_knn is swapped
+    pk.torch = pk_torch
+    sys.modules["pykeops"] = pk
+    sys.modules["pykeops.torch"] = pk_torch
     return True
 
 
@@ -112,7 +115,8 @@ class Noise2Score3DWrapper(Denoiser):
         for p in (str(repo), str(repo / "models")):  # they import both
             if p not in sys.path:                    # `models.easy_kpconv` and
                 sys.path.insert(0, p)                # `easy_kpconv` styles
-        with _cuda_calls_noop_without_cuda():
+        self._device = device
+        with _cuda_calls_redirected(device):
             shimmed = _shim_pykeops_if_missing()
             from models import KPconv_test as n2s3d
             if shimmed:  # radius_search imports keops_knn by name — patch both
@@ -174,7 +178,7 @@ class Noise2Score3DWrapper(Denoiser):
     def denoise(self, y: torch.Tensor) -> torch.Tensor:
         outs = []
         for cloud in y:  # their pack-mode path handles one cloud at a time
-            with _cuda_calls_noop_without_cuda():
+            with _cuda_calls_redirected(self._device):
                 score, _, _ = self.model(cloud[None], None)  # (N, 3)
             outs.append(cloud + self.sigma**2 * score)
         return torch.stack(outs)
