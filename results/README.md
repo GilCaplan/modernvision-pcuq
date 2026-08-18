@@ -14,7 +14,7 @@ Exact MMSE theory bounds posterior eigenvalues by σ². Per σ (median top-eigva
 |---|---|---|---|
 | 0.01 | 1.06 | 0 | 0.999 |
 | 0.02 | 1.39 | 2 | 0.996 |
-| 0.03 | 1.88 | 10 | 0.886 |
+| 0.03 | 1.91 | 19 | 0.934 |
 | 0.05 ⚠ beyond training range | 0.72 | 191 | 0.408 |
 
 ## 2. The 3D-specific obstacle: graph rebuilds, and the fix
@@ -33,38 +33,38 @@ Whole-shape posteriors are near-isotropic (flat spectra). Restricting the operat
 
 Best converged, PSD region runs (spread = top-to-last eigenvalue gap). Per exemplar: region modes, mode-0 direction arrows, mode-0 sweep x̂ ± t·√λ·v:
 
-### chair_0890_sigma0.03_r0  (spread 24%)
+### table_0395_sigma0.02_r1  (spread 33%)
 
-![chair_0890_sigma0.03_r0 modes](figures/chair_0890_sigma0.03_r0_modes.png)
-![chair_0890_sigma0.03_r0 arrows](figures/chair_0890_sigma0.03_r0_mode0_arrows.png)
-![chair_0890_sigma0.03_r0 sweep](figures/chair_0890_sigma0.03_r0_mode0_sweep.png)
+![table_0395_sigma0.02_r1 modes](figures/table_0395_sigma0.02_r1_modes.png)
+![table_0395_sigma0.02_r1 arrows](figures/table_0395_sigma0.02_r1_mode0_arrows.png)
+![table_0395_sigma0.02_r1 sweep](figures/table_0395_sigma0.02_r1_mode0_sweep.png)
+
+### guitar_0157_sigma0.03_r1  (spread 31%)
+
+![guitar_0157_sigma0.03_r1 modes](figures/guitar_0157_sigma0.03_r1_modes.png)
+![guitar_0157_sigma0.03_r1 arrows](figures/guitar_0157_sigma0.03_r1_mode0_arrows.png)
+![guitar_0157_sigma0.03_r1 sweep](figures/guitar_0157_sigma0.03_r1_mode0_sweep.png)
+
+### chair_0891_sigma0.03_r0  (spread 30%)
+
+![chair_0891_sigma0.03_r0 modes](figures/chair_0891_sigma0.03_r0_modes.png)
+![chair_0891_sigma0.03_r0 arrows](figures/chair_0891_sigma0.03_r0_mode0_arrows.png)
+![chair_0891_sigma0.03_r0 sweep](figures/chair_0891_sigma0.03_r0_mode0_sweep.png)
+
+### table_0395_sigma0.03_r1  (spread 29%)
+
+![table_0395_sigma0.03_r1 modes](figures/table_0395_sigma0.03_r1_modes.png)
+![table_0395_sigma0.03_r1 arrows](figures/table_0395_sigma0.03_r1_mode0_arrows.png)
+![table_0395_sigma0.03_r1 sweep](figures/table_0395_sigma0.03_r1_mode0_sweep.png)
+
+### lamp_0126_sigma0.02_r0  (spread 23%)
+
+![lamp_0126_sigma0.02_r0 modes](figures/lamp_0126_sigma0.02_r0_modes.png)
+![lamp_0126_sigma0.02_r0 arrows](figures/lamp_0126_sigma0.02_r0_mode0_arrows.png)
+![lamp_0126_sigma0.02_r0 sweep](figures/lamp_0126_sigma0.02_r0_mode0_sweep.png)
 
 ### airplane_0627_sigma0.02_r0  (spread 21%)
 
 ![airplane_0627_sigma0.02_r0 modes](figures/airplane_0627_sigma0.02_r0_modes.png)
 ![airplane_0627_sigma0.02_r0 arrows](figures/airplane_0627_sigma0.02_r0_mode0_arrows.png)
 ![airplane_0627_sigma0.02_r0 sweep](figures/airplane_0627_sigma0.02_r0_mode0_sweep.png)
-
-### lamp_0125_sigma0.03_r1  (spread 19%)
-
-![lamp_0125_sigma0.03_r1 modes](figures/lamp_0125_sigma0.03_r1_modes.png)
-![lamp_0125_sigma0.03_r1 arrows](figures/lamp_0125_sigma0.03_r1_mode0_arrows.png)
-![lamp_0125_sigma0.03_r1 sweep](figures/lamp_0125_sigma0.03_r1_mode0_sweep.png)
-
-### airplane_0627_sigma0.03_r1  (spread 14%)
-
-![airplane_0627_sigma0.03_r1 modes](figures/airplane_0627_sigma0.03_r1_modes.png)
-![airplane_0627_sigma0.03_r1 arrows](figures/airplane_0627_sigma0.03_r1_mode0_arrows.png)
-![airplane_0627_sigma0.03_r1 sweep](figures/airplane_0627_sigma0.03_r1_mode0_sweep.png)
-
-### table_0393_sigma0.02_r1  (spread 13%)
-
-![table_0393_sigma0.02_r1 modes](figures/table_0393_sigma0.02_r1_modes.png)
-![table_0393_sigma0.02_r1 arrows](figures/table_0393_sigma0.02_r1_mode0_arrows.png)
-![table_0393_sigma0.02_r1 sweep](figures/table_0393_sigma0.02_r1_mode0_sweep.png)
-
-### table_0393_sigma0.03_r0  (spread 11%)
-
-![table_0393_sigma0.03_r0 modes](figures/table_0393_sigma0.03_r0_modes.png)
-![table_0393_sigma0.03_r0 arrows](figures/table_0393_sigma0.03_r0_mode0_arrows.png)
-![table_0393_sigma0.03_r0 sweep](figures/table_0393_sigma0.03_r0_mode0_sweep.png)
