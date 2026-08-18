@@ -267,7 +267,7 @@
                osc: !reduced, spin: false, dimctx: true, ghost: true, heat: false,
                painting: false, moveMode: true, maskCenter: null,
                brush: 22, painted: new Set(), freeRun: null,
-               img: 0, box: null, free2d: null };
+               img: 0, box: null, free2d: null, boxes: {} };
 
   // ---- free-mask support: rank-k whole-shape spectra --------------------
   const FREE = {};  // shape -> {sigma, eigvals, x_hat, modes Float32Array, k, n}
@@ -489,16 +489,19 @@
       $("freebtns").classList.add("hidden");   // drag always moves it in 2D
       chips($("runs2d"), imgs2, v => v.label,
             (v, i) => i === st.img,
-            (v, i) => { st.img = i; st.box = defaultBox(imgs2[i]);
+            (v, i) => { if (st.box) st.boxes[st.img] = st.box;  // saved per image
+                        st.img = i;
+                        st.box = st.boxes[i] || defaultBox(imgs2[i]);
                         st.free2d = computeFree2d(); });
       const e = imgs2[st.img];
-      if (!st.box) { st.box = defaultBox(e); st.free2d = computeFree2d(); }
+      if (!st.box) { st.box = st.boxes[st.img] || defaultBox(e);
+                     st.free2d = computeFree2d(); }
       r = st.free2d
         ? { tag: `${e.id} (${e.kind}) · movable mask`, sigma: e.sigma,
             eigvals: st.free2d.eigvals, kind: e.kind }
         : { tag: e.id, sigma: e.sigma, eigvals: [], kind: e.kind };
-      $("legend").textContent = "drag the box to move the mask · size slider resizes it";
-      $("hint").textContent = "hover for local σ · drag = move the mask";
+      $("legend").textContent = "drag inside the box to move it · drag its corner handle to resize (saved per image)";
+      $("hint").textContent = "hover for local σ · drag = move · corner = resize";
     }
     if (st.mode >= r.eigvals.length) st.mode = 0;
     if (!r.eigvals.length) {
@@ -672,21 +675,46 @@
     off.getContext("2d").putImageData(im, 0, 0);
     ctx.imageSmoothingEnabled = e.kind !== "mnist";
     ctx.drawImage(off, ox, oy, e.w * scale, e.h * scale);
-    if (b) {  // box outline
+    if (b) {  // box outline + corner resize handle
+      const bx = ox + b.x0 * fx * scale, by = oy + b.y0 * fy * scale;
+      const bw = (b.x1 - b.x0) * fx * scale, bh = (b.y1 - b.y0) * fy * scale;
       ctx.strokeStyle = "#ff8a7a";
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(ox + b.x0 * fx * scale, oy + b.y0 * fy * scale,
-                     (b.x1 - b.x0) * fx * scale, (b.y1 - b.y0) * fy * scale);
+      ctx.strokeRect(bx, by, bw, bh);
+      ctx.fillStyle = "#ff8a7a";
+      ctx.fillRect(bx + bw - 5, by + bh - 5, 10, 10);  // drag me to resize
     }
   }
-  function moveBoxTo(ev) {
-    if (!imgs2.length) return;
+  function boxCursor(ev) {  // cursor position in mode-res coords, or null
+    if (!imgs2.length) return null;
     const rect = canvas.getBoundingClientRect();
     const { e, scale, ox, oy } = view2d(rect.width, rect.height);
-    const x = (ev.clientX - rect.left - ox) / scale / (e.w / e.mw);
-    const y = (ev.clientY - rect.top - oy) / scale / (e.h / e.mh);
-    if (x < 0 || y < 0 || x > e.mw || y > e.mh) return;
-    st.box = { cx: x, cy: y, side: st.box ? st.box.side : defaultBox(e).side };
+    return { e,
+      x: (ev.clientX - rect.left - ox) / scale / (e.w / e.mw),
+      y: (ev.clientY - rect.top - oy) / scale / (e.h / e.mh),
+      pxPerMode: scale * (e.w / e.mw) };
+  }
+  function onBoxCorner(ev) {  // is the cursor grabbing the resize handle?
+    const c = boxCursor(ev);
+    if (!c || !st.box || !st.free2d) return false;
+    const b = st.free2d.box, tol = 9 / c.pxPerMode;
+    return Math.abs(c.x - b.x1) < tol && Math.abs(c.y - b.y1) < tol;
+  }
+  function moveBoxTo(ev) {
+    const c = boxCursor(ev);
+    if (!c) return;
+    if (c.x < 0 || c.y < 0 || c.x > c.e.mw || c.y > c.e.mh) return;
+    st.box = { cx: c.x, cy: c.y, side: st.box ? st.box.side : defaultBox(c.e).side };
+    st.boxes[st.img] = st.box;
+    st.free2d = computeFree2d();
+    build(); draw();
+  }
+  function resizeBoxTo(ev) {
+    const c = boxCursor(ev);
+    if (!c || !st.box) return;
+    const side = 2 * Math.max(Math.abs(c.x - st.box.cx), Math.abs(c.y - st.box.cy));
+    st.box.side = Math.max(6, Math.min(Math.min(c.e.mw, c.e.mh), Math.round(side)));
+    st.boxes[st.img] = st.box;
     st.free2d = computeFree2d();
     build(); draw();
   }
@@ -828,7 +856,10 @@
     canvas.setPointerCapture(e.pointerId);
     if (st.osc) { st.osc = false;  // touching the canvas stops the auto-sweep
       $("osc").setAttribute("aria-pressed", "false"); }
-    if (st.tab === "2d") { dragp = "box"; moveBoxTo(e); return; }
+    if (st.tab === "2d") {
+      if (onBoxCorner(e)) { dragp = "resize"; resizeBoxTo(e); return; }
+      dragp = "box"; moveBoxTo(e); return;
+    }
     if (isPainting()) { dragp = "paint"; paintAt(e); return; }
     if (isMoving()) { dragp = "move"; moveMaskTo(e); return; }
     dragp = { x: e.clientX, y: e.clientY }; });
@@ -877,7 +908,11 @@
   canvas.addEventListener("pointerleave", () => $("tip").classList.add("hidden"));
   canvas.addEventListener("pointermove", e => {
     if (!dragp) { if (st.tab === "3d") hover3d(e); else hover2d(e); return; }
-    if (st.tab !== "3d") { if (dragp === "box") { moveBoxTo(e); } return; }
+    if (st.tab !== "3d") {
+      if (dragp === "box") moveBoxTo(e);
+      else if (dragp === "resize") resizeBoxTo(e);
+      return;
+    }
     if (dragp === "paint") { paintAt(e); return; }
     if (dragp === "move") { moveMaskTo(e); return; }
     st.yaw += (e.clientX - dragp.x) * 0.008;

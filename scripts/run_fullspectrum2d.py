@@ -29,7 +29,6 @@ from pcuq.utils import set_seed
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT / "external/GaussianDenoisingPosterior"
-FACES = ["213", "227", "34"]
 
 
 def b64_int16(a: np.ndarray):
@@ -70,39 +69,63 @@ def spectrum_entry(den, x, name, kind, label, k, iters, method, pool):
             "png": png_uri(disp), "modes_b64": modes_b64, "modes_scale": scale}
 
 
+def write_merged(entries):
+    dst = ROOT / "results/viewer_data_2d.json"
+    existing = json.loads(dst.read_text())["images"] if dst.exists() else []
+    if not isinstance(existing, list):
+        existing = []
+    by_id = {e["id"]: e for e in existing}
+    for e in entries:
+        by_id[e["id"]] = e
+    merged = sorted(by_id.values(), key=lambda e: (e["kind"] != "mnist", e["id"]))
+    dst.write_text(json.dumps({"images": merged}, separators=(",", ":")))
+    return dst, len(merged)
+
+
 def main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--digits", type=int, nargs="*", default=[2, 1, 18],
+                        help="MNIST test-set indices")
+    parser.add_argument("--faces", nargs="*", default=["213", "227", "34"],
+                        help="face ids under docs/resources/faces-<id>/")
+    parser.add_argument("--replace", action="store_true",
+                        help="replace the whole bundle (default: merge by id)")
+    args = parser.parse_args()
     set_seed(0)
     (ROOT / "outputs/fullspectrum2d").mkdir(parents=True, exist_ok=True)
     device = torch.device("cpu")
+    if args.replace:
+        (ROOT / "results/viewer_data_2d.json").unlink(missing_ok=True)
     entries = []
 
-    from torchvision.datasets import MNIST
-    from pcuq.denoisers2d import MNISTDenoiser2D
-    den = MNISTDenoiser2D(str(REPO), device)
-    test = MNIST(root=str(ROOT / "data"), train=False, download=True)
-    for i in (2, 1, 18):
-        img, label = test[i]
-        x = torch.from_numpy(np.array(img)).float()[None] / 255
-        entries.append(spectrum_entry(den, x, f"mnist{i}", "mnist",
-                                      f"digit {label}", k=12, iters=40,
-                                      method="autograd", pool=1))
+    if args.digits:
+        from torchvision.datasets import MNIST
+        from pcuq.denoisers2d import MNISTDenoiser2D
+        den = MNISTDenoiser2D(str(REPO), device)
+        test = MNIST(root=str(ROOT / "data"), train=False, download=True)
+        for i in args.digits:
+            img, label = test[i]
+            x = torch.from_numpy(np.array(img)).float()[None] / 255
+            entries.append(spectrum_entry(den, x, f"mnist{i}", "mnist",
+                                          f"digit {label}", k=12, iters=40,
+                                          method="autograd", pool=1))
+        write_merged(entries)
 
-    from pcuq.denoisers2d import FFHQDenoiser2D
-    den = FFHQDenoiser2D(str(REPO), device, from_t=400)
-    for fid in FACES:
-        img = Image.open(REPO / f"docs/resources/faces-{fid}/ev1_0.00.png") \
-            .convert("RGB").resize((256, 256))
-        x = torch.from_numpy(np.array(img)).float().permute(2, 0, 1) / 127.5 - 1
-        entries.append(spectrum_entry(den, x, f"face{fid}", "ffhq",
-                                      f"face {fid}", k=10, iters=6,
-                                      method="bp", pool=2))
-        # write incrementally — each face takes ~13 min
-        (ROOT / "results/viewer_data_2d.json").write_text(
-            json.dumps({"images": entries}, separators=(",", ":")))
+    if args.faces:
+        from pcuq.denoisers2d import FFHQDenoiser2D
+        den = FFHQDenoiser2D(str(REPO), device, from_t=400)
+        for fid in args.faces:
+            img = Image.open(REPO / f"docs/resources/faces-{fid}/ev1_0.00.png") \
+                .convert("RGB").resize((256, 256))
+            x = torch.from_numpy(np.array(img)).float().permute(2, 0, 1) / 127.5 - 1
+            entries.append(spectrum_entry(den, x, f"face{fid}", "ffhq",
+                                          f"face {fid}", k=10, iters=6,
+                                          method="bp", pool=2))
+            write_merged(entries)  # incremental — each face takes ~13 min
 
-    dst = ROOT / "results/viewer_data_2d.json"
-    dst.write_text(json.dumps({"images": entries}, separators=(",", ":")))
-    print(f"done — {len(entries)} images -> {dst} ({dst.stat().st_size/1e6:.1f} MB)")
+    dst, n = write_merged(entries)
+    print(f"done — bundle now has {n} images -> {dst} ({dst.stat().st_size/1e6:.1f} MB)")
 
 
 if __name__ == "__main__":
