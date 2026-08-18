@@ -11,6 +11,7 @@ Scale knobs come from the config (data.*, spectrum.*, spectrum.mask.*).
 """
 
 import argparse
+import contextlib
 import json
 import sys
 import time
@@ -64,7 +65,8 @@ def main() -> None:
                     print(f"[{tag}] already done — skipping")
                     continue
                 t0 = time.time()
-                with den.graph_frozen():
+                freeze = cfg["denoiser"]["freeze_graph"]
+                with den.graph_frozen() if freeze else contextlib.nullcontext():
                     with torch.no_grad():
                         x_hat = den(y[None])[0]  # anchor (fills graph cache)
                     eigvecs, eigvals, history = top_eigenpairs(

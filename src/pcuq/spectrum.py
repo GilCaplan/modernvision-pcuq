@@ -29,16 +29,23 @@ def top_eigenpairs(denoiser: Denoiser, y: torch.Tensor, sigma: float, k: int,
                    symmetrize: bool = False, mask: torch.Tensor = None):
     """Estimate the top-k eigenpairs of sigma^2 * J at anchor y (shape (N, 3)).
 
-    mask: optional (N,) bool — restrict the operator to those points (M J M), the
-    point-cloud analog of the reference repo's patch masks: "how can THIS region
-    vary?". Whole-shape spectra are nearly flat (posterior ~ isotropic); structure
-    lives in regions. Returned eigvecs are zero outside the mask.
+    mask: optional bool tensor — restrict the operator to that region (M J M), the
+    analog of the reference repo's patch masks: "how can THIS region vary?".
+    (N,) selects points of an (N, 3) cloud; a mask shaped like y (e.g. (C, H, W)
+    for images) selects elements directly. Whole-signal spectra are nearly flat
+    (posterior ~ isotropic); structure lives in regions. Returned eigvecs are zero
+    outside the mask.
 
-    Returns (eigvecs (k, N, 3), eigvals (k,) descending, history) where history[i]
-    is the per-vector overlap |<v_new, v_old>| at iteration i — a convergence signal
-    (all -> 1 when the subspace has settled).
+    Returns (eigvecs (k, *y.shape), eigvals (k,) descending, history) where
+    history[i] is the per-vector overlap |<v_new, v_old>| at iteration i — a
+    convergence signal (all -> 1 when the subspace has settled).
     """
-    m = None if mask is None else mask.to(device=y.device, dtype=y.dtype).reshape(-1, 1)
+    if mask is None:
+        m = None
+    else:
+        m = mask.to(device=y.device, dtype=y.dtype)
+        if m.shape != y.shape:
+            m = m.reshape(-1, 1)  # (N,) point mask against (N, 3)
 
     def op(V):
         W = sym_jvp(denoiser, y, V, method, c) if symmetrize \

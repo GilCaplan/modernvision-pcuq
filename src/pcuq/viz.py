@@ -71,6 +71,39 @@ def plot_mode_arrows(x_hat: torch.Tensor, eigvec: torch.Tensor, eigval: torch.Te
     plt.close(fig)
 
 
+def _img(t):
+    """(C, H, W) tensor in [0,1] or [-1,1] -> HxW(xC) array in [0,1] for imshow."""
+    a = t.detach().cpu()
+    if a.min() < -0.01:
+        a = (a + 1) / 2
+    a = a.clamp(0, 1)
+    return a[0].numpy() if a.shape[0] == 1 else a.permute(1, 2, 0).numpy()
+
+
+def plot_sweep_2d(x_hat: torch.Tensor, eigvecs: torch.Tensor, eigvals: torch.Tensor,
+                  path: Path, ts=(-3.0, -1.5, 0.0, 1.5, 3.0)) -> None:
+    """The reference paper's signature figure, from our pipeline: one row per
+    mode, columns are x_hat + t*sqrt(λ)*v. x_hat (C,H,W), eigvecs (k,C,H,W)."""
+    k = eigvecs.shape[0]
+    fig, axes = plt.subplots(k, len(ts), figsize=(1.6 * len(ts), 1.7 * k),
+                             squeeze=False)
+    for i in range(k):
+        step = float(eigvals[i].clamp(min=0).sqrt())
+        for j, t in enumerate(ts):
+            ax = axes[i][j]
+            ax.imshow(_img(x_hat + t * step * eigvecs[i]), cmap="gray",
+                      vmin=0, vmax=1)
+            ax.set_axis_off()
+            if i == 0:
+                ax.set_title(f"t={t:+.1f}", fontsize=8)
+        axes[i][0].set_axis_on()
+        axes[i][0].set_xticks([]), axes[i][0].set_yticks([])
+        axes[i][0].set_ylabel(f"mode {i}\nλ={float(eigvals[i]):.1e}", fontsize=7)
+    fig.tight_layout()
+    fig.savefig(path, dpi=170)
+    plt.close(fig)
+
+
 def plot_mode_sweep(x_hat: torch.Tensor, eigvec: torch.Tensor, eigval: torch.Tensor,
                     path: Path, ts=(-3.0, 0.0, 3.0),
                     mask: torch.Tensor = None) -> None:
