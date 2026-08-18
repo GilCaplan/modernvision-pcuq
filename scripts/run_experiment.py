@@ -32,6 +32,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", required=True)
     parser.add_argument("--override", nargs="*", default=[])
+    parser.add_argument("--fresh", action="store_true",
+                        help="recompute everything (default: resume, skipping "
+                             "(shape, sigma) runs whose artifacts already exist)")
     args = parser.parse_args()
 
     cfg = apply_overrides(load_config(args.config), args.override)
@@ -66,7 +69,11 @@ def main() -> None:
                                        sigma=cfg["data"]["sigmas"][0], device=device)
 
     jc, sp, dg = cfg["jacobian"], cfg["spectrum"], cfg["diagnostics"]
-    metrics = {}
+    # Crash-safe: metrics.json and per-run .pt files are written after every run,
+    # and a rerun resumes from them instead of recomputing (unless --fresh).
+    metrics_path = out / "metrics.json"
+    metrics = {} if args.fresh or not metrics_path.exists() \
+        else json.loads(metrics_path.read_text())
     for sigma in cfg["data"]["sigmas"]:
         if analytic:
             den = AnalyticGaussianDenoiser(toy, sigma).to(device)
@@ -81,6 +88,10 @@ def main() -> None:
         freeze = (not analytic) and cfg["denoiser"]["freeze_graph"]
 
         for si, (name, x) in enumerate(shapes):
+            tag = f"{name}_sigma{sigma}"
+            if tag in metrics and (out / f"{tag}.pt").exists():
+                print(f"[{tag}] already done — skipping (use --fresh to redo)")
+                continue
             t0 = time.time()
             x = x.to(device)
             y = corrupt(x[None], sigma, cfg["seed"] + si)[0].to(device)
@@ -114,8 +125,6 @@ def main() -> None:
                     if analytic:
                         m["antisym_energy_probes"] = antisym_energy(den, y)
             m["seconds"] = time.time() - t0
-
-            tag = f"{name}_sigma{sigma}"
             metrics[tag] = m
             torch.save({"x": x.cpu(), "y": y.cpu(), "x_hat": x_hat.cpu(),
                         "eigvecs": eigvecs.cpu(), "eigvals": eigvals.cpu(),
