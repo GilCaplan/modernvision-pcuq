@@ -59,6 +59,26 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 - [ ] Optional follow-ups: σ=0.03 run (breakdown boundary), unfrozen ablation slice
       at full scale for the A/B table
 
+## Phase 3.5 — Masked (region-restricted) uncertainty modes — **the missing half**
+
+Phase-3 finding: whole-shape spectra are nearly flat (top-5 eigvals within ~1–8% —
+posterior ≈ isotropic), so whole-shape "top modes" are near-degenerate. The reference
+paper hit the same wall in images and solved it with *patch masks*; our analog is a
+subset of points. This phase delivers the proposal's actual centerpiece: interpretable
+geometric uncertainty modes for shape *regions*.
+
+- [x] `spectrum.top_eigenpairs(..., mask=)`: restrict the operator to `M·J·M`
+      (cf. `external/.../moments_calculations.py:get_eigvecs`'s mask handling);
+      tested against the dense eigendecomposition of `M·A·M` on the toy
+- [x] `data.extremity_patch_masks`: kNN patches seeded at shape extremities
+- [x] `viz`: mask-aware modes/sweeps + `plot_mode_arrows` (direction is the
+      interpretable content; magnitude coloring alone is too faint)
+- [x] `scripts/run_masked_modes.py`: region gallery with resume
+- [ ] **Gate (in progress):** first 20 region runs show spreads up to 29% @ σ=0.02
+      and ~10–24% typical @ σ=0.03 (vs 1–8% whole-shape) — structure exists; the
+      15-shape gallery + σ=0.03 sweep + unfrozen ablation are running for the
+      comprehensive tables (see LOG.md when they land)
+
 ## Phase 4 — Analysis, visualization, report
 
 - [ ] `viz.py`: eigenmode displacement fields on point clouds (± amounts along mode,

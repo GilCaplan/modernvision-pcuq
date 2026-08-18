@@ -26,17 +26,27 @@ def _orthonormalize(V: torch.Tensor) -> torch.Tensor:
 
 def top_eigenpairs(denoiser: Denoiser, y: torch.Tensor, sigma: float, k: int,
                    iters: int, method: str = "central", c: float = 1e-4,
-                   symmetrize: bool = False):
+                   symmetrize: bool = False, mask: torch.Tensor = None):
     """Estimate the top-k eigenpairs of sigma^2 * J at anchor y (shape (N, 3)).
+
+    mask: optional (N,) bool — restrict the operator to those points (M J M), the
+    point-cloud analog of the reference repo's patch masks: "how can THIS region
+    vary?". Whole-shape spectra are nearly flat (posterior ~ isotropic); structure
+    lives in regions. Returned eigvecs are zero outside the mask.
 
     Returns (eigvecs (k, N, 3), eigvals (k,) descending, history) where history[i]
     is the per-vector overlap |<v_new, v_old>| at iteration i — a convergence signal
     (all -> 1 when the subspace has settled).
     """
-    op = (lambda V: sym_jvp(denoiser, y, V, method, c)) if symmetrize \
-        else (lambda V: jvp(denoiser, y, V, method, c))
+    m = None if mask is None else mask.to(device=y.device, dtype=y.dtype).reshape(-1, 1)
 
-    V = _orthonormalize(torch.randn(k, *y.shape, device=y.device, dtype=y.dtype))
+    def op(V):
+        W = sym_jvp(denoiser, y, V, method, c) if symmetrize \
+            else jvp(denoiser, y, V, method, c)
+        return W if m is None else W * m
+
+    V = torch.randn(k, *y.shape, device=y.device, dtype=y.dtype)
+    V = _orthonormalize(V if m is None else V * m)
     history = []
     for _ in range(iters):
         V_new = _orthonormalize(op(V))

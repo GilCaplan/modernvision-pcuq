@@ -153,6 +153,29 @@ def load_modelnet(cfg: dict, dtype: torch.dtype = torch.float32):
     return shapes
 
 
+def extremity_patch_masks(points: torch.Tensor, n_regions: int,
+                          frac: float) -> torch.Tensor:
+    """(n_regions, N) bool kNN-patch masks seeded at shape extremities.
+
+    Seeds are farthest-from-centroid points, successively chosen to also be far
+    from already-picked seeds — tips, arms, legs: the regions where posterior
+    anisotropy should live. Each mask covers ~frac of the points around its seed.
+    """
+    d = (points - points.mean(dim=0)).norm(dim=1)
+    seeds = [int(d.argmax())]
+    for _ in range(n_regions - 1):
+        gap = torch.cdist(points, points[seeds]).min(dim=1).values
+        seeds.append(int((gap * d).argmax()))
+    k = max(8, int(frac * len(points)))
+    masks = []
+    for s in seeds:
+        idx = (points - points[s]).norm(dim=1).topk(k, largest=False).indices
+        mk = torch.zeros(len(points), dtype=torch.bool)
+        mk[idx] = True
+        masks.append(mk)
+    return torch.stack(masks)
+
+
 def make_toy_gaussian(n_points: int, seed: int, dtype: torch.dtype = torch.float32,
                       amp: float = 1e-2, decay: float = 0.1) -> ToyGaussian:
     """Toy prior around a unit-ish sphere with a strongly separated spectrum.
