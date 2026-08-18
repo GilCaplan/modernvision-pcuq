@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from pcuq.data import make_toy_gaussian
 from pcuq.denoisers import AnalyticGaussianDenoiser, Denoiser
-from pcuq.diagnostics import antisym_energy, check_equivariance
+from pcuq.diagnostics import antisym_energy, antisym_energy_fd, check_equivariance
 from pcuq.jacobian import jvp, vjp
 from pcuq.spectrum import top_eigenpairs
 
@@ -59,6 +59,15 @@ def test_symmetrized_matches_plain_for_symmetric_jacobian():
     _, vals_sym, _ = top_eigenpairs(den, y, SIGMA, k=2, iters=40, symmetrize=True)
     assert torch.allclose(vals_plain, vals_sym, rtol=1e-6)
     assert antisym_energy(den, y) < 1e-10
+
+
+def test_antisym_fd_matches_autograd_probe_for_symmetric_jacobian():
+    _, den, y = _setup()
+    V = torch.randn(3, *y.shape, generator=torch.Generator().manual_seed(3),
+                    dtype=torch.float64)
+    V, _ = torch.linalg.qr(V.reshape(3, -1).T)
+    V = V.T.reshape(3, *y.shape)
+    assert antisym_energy_fd(den, y, V, c=1e-6) < 1e-8  # A symmetric -> ~0
 
 
 class _PointwiseShrink(Denoiser):
