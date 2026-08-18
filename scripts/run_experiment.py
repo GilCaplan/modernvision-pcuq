@@ -20,8 +20,8 @@ import torch
 
 from pcuq.data import corrupt, load_modelnet, make_toy_gaussian
 from pcuq.denoisers import AnalyticGaussianDenoiser, Noise2Score3DWrapper
-from pcuq.diagnostics import (antisym_energy, check_equivariance, psd_report,
-                              sweep_step_size, sweep_step_size_fd)
+from pcuq.diagnostics import (antisym_energy, antisym_energy_fd, check_equivariance,
+                              psd_report, sweep_step_size, sweep_step_size_fd)
 from pcuq.spectrum import top_eigenpairs
 from pcuq.utils import apply_overrides, get_device, load_config, make_out_dir, set_seed
 from pcuq.viz import plot_mode_sweep, plot_modes
@@ -92,6 +92,9 @@ def main() -> None:
                 "eigvals": eigvals.cpu().tolist(),
                 "final_iter_overlap": history[-1].tolist(),
                 "psd": psd_report(eigvals.cpu()),
+                # asymmetry of J restricted to the reported uncertainty subspace
+                "antisym_energy_subspace": antisym_energy_fd(
+                    den, y, eigvecs, method=jc["method"], c=jc["c"]),
                 "seconds": time.time() - t0,
             }
             if si == 0:  # per-sigma diagnostics, once on the first shape
@@ -101,7 +104,7 @@ def main() -> None:
                 m["step_size_sweep"] = sweep(den, y, dg["step_size_sweep"],
                                              method=jc["method"])
                 if analytic:
-                    m["antisym_energy"] = antisym_energy(den, y)
+                    m["antisym_energy_probes"] = antisym_energy(den, y)
 
             tag = f"{name}_sigma{sigma}"
             metrics[tag] = m

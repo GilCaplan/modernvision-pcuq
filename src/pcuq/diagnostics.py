@@ -64,6 +64,7 @@ def antisym_energy(denoiser: Denoiser, y: torch.Tensor, n_probes: int = 5,
 
     0 for an exact MMSE denoiser (covariance is symmetric); large values mean the
     implied covariance of the approximate denoiser can't be trusted un-symmetrized.
+    Needs J^T v via autograd — use antisym_energy_fd for models torch.func can't trace.
     """
     V = _unit_probes(y, n_probes, seed)
     Jv = jvp(denoiser, y, V, method="autograd")
@@ -71,6 +72,22 @@ def antisym_energy(denoiser: Denoiser, y: torch.Tensor, n_probes: int = 5,
     num = (Jv - Jtv).reshape(n_probes, -1).norm(dim=1)
     den = (Jv + Jtv).reshape(n_probes, -1).norm(dim=1)
     return float((num / den).mean())
+
+
+def antisym_energy_fd(denoiser: Denoiser, y: torch.Tensor, V: torch.Tensor,
+                      method: str = "central", c: float = 1e-4) -> float:
+    """Forward-passes-only asymmetry probe (for models autograd can't trace).
+
+    Restricted to the subspace spanned by the orthonormal fields V (k, N, 3) —
+    typically the converged eigenvectors: form the bilinear matrix
+    A_ij = <v_i, J v_j> and return ||A - A^T||_F / ||A + A^T||_F. Asymmetry of J
+    *within the reported uncertainty subspace* is exactly what makes the covariance
+    estimate untrustworthy, so this is the part worth monitoring.
+    """
+    k = V.shape[0]
+    W = jvp(denoiser, y, V, method=method, c=c)
+    A = V.reshape(k, -1) @ W.reshape(k, -1).T
+    return float((A - A.T).norm() / (A + A.T).norm())
 
 
 def psd_report(eigvals: torch.Tensor) -> dict:
