@@ -42,8 +42,10 @@ def main() -> None:
     device = get_device(cfg)
     kind = cfg["denoiser"]["kind"]
     analytic = kind == "analytic_gaussian"
-    if device.type == "mps" and not analytic:
-        device = torch.device("cpu")  # their graph ops are unverified on MPS
+    if device.type == "mps" and not analytic and cfg["device"] == "auto":
+        # Measured 2026-08-17: the real model runs on MPS but ~1.4x SLOWER than CPU
+        # (graph-heavy small kernels). auto prefers CPU; explicit mps is honored.
+        device = torch.device("cpu")
     dtype = torch.float64 if (cfg["double_precision"] and analytic) else torch.float32
     if cfg["double_precision"] and not analytic:
         print("note: double_precision ignored for noise2score3d (float32 weights).")
