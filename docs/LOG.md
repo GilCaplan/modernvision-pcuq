@@ -15,6 +15,28 @@ Entry template:
 
 ---
 
+## 2026-08-18 — Comprehensive evidence set complete; results/ folder built
+**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
+**What:** Three background runs to make the report evidence comprehensive, plus a
+curated, git-tracked `results/` folder (`scripts/build_results.py` regenerates it:
+summary charts, auto-picked exemplar galleries, README with computed tables).
+**Results:**
+- **Calibration σ-trend (50 shapes each):** λ₀/σ² median 1.06 (σ=0.01) → 1.39
+  (0.02) → **1.91 (0.03**, convergence 0.93, 19 neg eigvals — the transitional
+  regime approaching the training edge 0.034**)** → breakdown (0.05). A clean
+  monotone degradation curve for the report.
+- **Unfrozen ablation at 15 shapes (σ=0.02):** median λ₀/σ² 2.91, antisym 0.34,
+  convergence 0.18 — vs frozen 1.39 / 0.009 / 1.00. The A/B table is now real
+  statistics, not a 5-shape anecdote.
+- **Masked gallery, 60 region runs:** σ=0.02: 28/30 converged+PSD, spreads up to
+  33%; σ=0.03: 22/30, median spread 12%, up to 31%. Arrow-field figures make modes
+  directly interpretable (e.g. chair_0891 r0: mode = coherent shift of the thin
+  stretcher rail between the legs).
+**Where things stand:** all proposal commitments are demonstrated and quantified;
+`results/README.md` is the at-a-glance summary. Remaining work is the write-up
+itself (report text, figure selection from results/, discussion of the 1.3–1.9σ²
+calibration drift and the training-range boundary).
+
 ## 2026-08-17 — Phase-3 sweep complete: calibrated in-distribution, breaks beyond training σ
 **Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
 (name=phase3: 50 shapes × σ∈{0.01,0.02,0.05} × 5 eigenpairs, 15 iters, frozen graph)
