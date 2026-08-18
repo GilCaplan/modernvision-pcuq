@@ -15,6 +15,18 @@ Entry template:
 
 ---
 
+## 2026-08-18 — Paint-your-own masks in the viewer (rank-24 client-side eigensolver)
+**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** run_fullspectrum.py
+**What:** Free-form mask selection without server compute: precompute the top-24
+whole-shape eigenpairs per shape (`scripts/run_fullspectrum.py`, chair/lamp/airplane
+@ σ=0.03, int16-quantized in `results/viewer_data_free.json`); for any painted mask M
+the masked covariance is exactly (MV)Λ(MV)ᵀ on the rank-24 approximation, so its
+modes reduce to a 24×24 Jacobi eigenproblem solved in the browser. Math validated
+headlessly in Node against the real bundle (masked μ₀ ≤ whole-shape λ₀ ✓). Viewer:
+"✏ custom" region chip → brush-paint points, Compute modes → sweepable like any run,
+labeled "rank-24 reconstruction" with a pointer to the exact-modes script.
+**Next:** report writing.
+
 ## 2026-08-18 — Faces fixed with exact gradients; corrections to two earlier claims
 **Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** run_images2d + bp
 **What:** User reported the face tab showed no visible change. Root-caused and fixed.
