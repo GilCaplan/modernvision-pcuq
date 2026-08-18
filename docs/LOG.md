@@ -15,6 +15,29 @@ Entry template:
 
 ---
 
+## 2026-08-17 — Phase-3 sweep complete: calibrated in-distribution, breaks beyond training σ
+**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
+(name=phase3: 50 shapes × σ∈{0.01,0.02,0.05} × 5 eigenpairs, 15 iters, frozen graph)
+**What:** Full-scale sweep, 150 runs in ~75 min, `outputs/phase3/run_experiment/`.
+**Result (per σ, medians over 50 shapes):**
+- **σ=0.01: top eigval 1.06σ² [0.81, 1.59], 0 negative eigvals (of 250), convergence
+  0.999, antisym 0.001.** Essentially at the exact-MMSE bound — the method is
+  *calibrated* in-distribution.
+- **σ=0.02: 1.39σ² [1.12, 2.33], 2 negatives, convergence 0.996, antisym 0.009.**
+  Mild inflation, growing with σ.
+- **σ=0.05: breakdown** — eigvals scattered [-7σ², +7σ²], 191/250 negative, median
+  convergence 0.41. Explanation found in their code: the model was trained with
+  σ annealed over **[0.004, 0.034]** (`models/KPconv.py:159`); σ=0.05 is ~50% beyond
+  the training range, so the score field (and its Jacobian) is extrapolating.
+  Denoising MSE still improves there (1.35×) — the *mean* extrapolates better than
+  the *derivative*, a nice report point.
+The earlier "~1.3σ² anomaly" is now a clean σ-trend: 1.06 → 1.39 → breakdown as σ
+approaches/exceeds the training range. Interpretation: score-Jacobian calibration
+degrades near the edge of the amortization range.
+**Next:** Report material is essentially complete: calibration-vs-σ table, the
+frozen-graph A/B, mode galleries. Optional: rerun σ=0.05 → 0.03 (inside training
+range) to show the breakdown boundary; unfrozen ablation slice for the A/B table.
+
 ## 2026-08-17 — MPS measured: works, but slower than CPU for the real model
 **Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
 **What:** Tested whether the real denoiser can use Apple's GPU (MPS) instead of CPU.
