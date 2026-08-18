@@ -66,6 +66,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", choices=["mnist", "ffhq"], default="mnist")
     parser.add_argument("--image", help="face image path (ffhq only)")
+    parser.add_argument("--face-id", default=None, help="label for this face")
     parser.add_argument("--from-t", type=int, default=100, help="DDPM timestep")
     parser.add_argument("--digits", type=int, nargs="*", default=[2, 1, 18])
     parser.add_argument("--n-ev", type=int, default=4)
@@ -109,9 +110,11 @@ def main() -> None:
         for rname, (y1, y2, x1, x2) in regions.items():
             mask = torch.zeros_like(x, dtype=torch.bool)
             mask[:, y1:y2, x1:x2] = True
-            run_one(den, f"face_{rname}_t{args.from_t}", x, mask, 3,
+            import re as _re
+            fid = args.face_id or (_re.search(r"faces-(\d+)", args.image or "") or [None, "213"])[1]
+            run_one(den, f"face{fid}_{rname}_t{args.from_t}", x, mask, 3,
                     iters=8, c=1e-3, out=out, viewer_runs=viewer_runs,
-                    meta={"kind": "ffhq", "label": rname}, method=args.method)
+                    meta={"kind": "ffhq", "label": f"{fid} · {rname}"}, method=args.method)
 
     bundle = ROOT / "results/viewer_data_2d.json"
     existing = json.loads(bundle.read_text())["runs"] if bundle.exists() else []
