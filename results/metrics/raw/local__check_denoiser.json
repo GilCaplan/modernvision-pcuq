@@ -1,0 +1,17 @@
+{
+  "forward_seconds": 1.1627445220947266,
+  "mse_noisy": 0.0004015487793367356,
+  "mse_denoised": 0.000331569230183959,
+  "equivariance_rel_err": 1.4511982726617134e-08,
+  "autograd_error": "RuntimeError(\"Cannot access data pointer of Tensor that doesn't have storage\")",
+  "spectrum_seconds": 28.181801319122314,
+  "eigvals": [
+    0.0007620425312779844,
+    0.0007059330237098038
+  ],
+  "final_iter_overlap": [
+    0.9929032921791077,
+    0.9950668215751648
+  ],
+  "covariance_kind": "frozen_pyramid_sensitivity"
+}

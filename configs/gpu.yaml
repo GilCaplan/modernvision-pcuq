@@ -21,6 +21,8 @@ denoiser:
   repo: external/Noise2Score3D
   checkpoint: data/checkpoints/noise2score3d_step4500.pth
   freeze_graph: true    # differentiate the smooth branch (see LOG.md 2026-08-17)
+  graph_freeze_variant: topology  # full | topology -- see local.yaml; override to
+    # `full` for parity with pre-2026-09-16 Phase 3/3.5 numbers
 
 jacobian:
   method: central
@@ -39,3 +41,24 @@ diagnostics:
   check_equivariance: true
   step_size_sweep: [1.0e-2, 1.0e-3, 1.0e-4, 1.0e-5, 1.0e-6]
   compare_autograd: true
+
+# Side quest (scripts/run_depth2d.py): see local.yaml for what this is.
+depth2d:
+  denoiser: ffhq        # heavier natural-image DDPM; needs ffhq.pt (2.2GB, see WORKFLOW.md)
+  repo: external/GaussianDenoisingPosterior
+  dataset:
+    root: data
+    n_shapes: 50
+    n_points: 2048
+    categories: [chair, airplane, table, lamp, guitar]
+  render:
+    axis: 2
+    dilate: 1
+  ffhq:
+    from_t: 100
+  spectrum:
+    n_ev: 4
+    iters: 25
+  jacobian:
+    method: autograd
+    c: 1.0e-3

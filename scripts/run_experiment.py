@@ -22,7 +22,8 @@ import torch
 from pcuq.data import corrupt, load_modelnet, make_toy_gaussian
 from pcuq.denoisers import AnalyticGaussianDenoiser, Noise2Score3DWrapper
 from pcuq.diagnostics import (antisym_energy, antisym_energy_fd, check_equivariance,
-                              psd_report, sweep_step_size, sweep_step_size_fd)
+                              is_trustworthy, psd_report, sweep_step_size,
+                              sweep_step_size_fd)
 from pcuq.spectrum import top_eigenpairs
 from pcuq.utils import apply_overrides, get_device, load_config, make_out_dir, set_seed
 from pcuq.viz import plot_mode_sweep, plot_modes
@@ -76,6 +77,11 @@ def main() -> None:
     metrics_path = out / "metrics.json"
     metrics = {} if args.fresh or not metrics_path.exists() \
         else json.loads(metrics_path.read_text())
+    # Which exact weights this run used -- config.json (written by make_out_dir)
+    # already has the resolved config/seed; this is the piece it can't have.
+    if wrapper is not None:
+        metrics["_provenance"] = {"checkpoint_sha256": wrapper.checkpoint_sha256,
+                                  "checkpoint_path": cfg["denoiser"]["checkpoint"]}
     for sigma in cfg["data"]["sigmas"]:
         if analytic:
             den = AnalyticGaussianDenoiser(toy, sigma).to(device)
@@ -87,7 +93,12 @@ def main() -> None:
 
         # Real model: differentiate the smooth branch (graph pyramid frozen at the
         # anchor) — unfrozen finite differences are jump-dominated, see LOG.md.
+        # graph_freeze_variant: topology (default since 2026-09-16 audit, LOG.md)
+        # only freezes discrete voxel/radius-search membership and lets coarse
+        # coordinates track the perturbed input; full freezes those too (the
+        # original, more restrictive approach — kept for report-parity reruns).
         freeze = (not analytic) and cfg["denoiser"]["freeze_graph"]
+        freeze_variant = cfg["denoiser"].get("graph_freeze_variant", "full")
 
         for si, (name, x) in enumerate(shapes):
             tag = f"{name}_sigma{sigma}"
@@ -102,24 +113,57 @@ def main() -> None:
             if si == 0 and dg["check_equivariance"]:  # needs real graph rebuilds
                 m["equivariance_rel_err"] = check_equivariance(den, y)
 
-            with den.graph_frozen() if freeze else contextlib.nullcontext():
+            if not freeze:
+                graph_ctx = contextlib.nullcontext()
+            elif freeze_variant == "topology":
+                graph_ctx = den.graph_topology_frozen()
+            else:
+                graph_ctx = den.graph_frozen()
+            with graph_ctx:
                 with torch.no_grad():
                     x_hat = den(y[None])[0]  # anchor forward (fills the graph cache)
 
-                eigvecs, eigvals, history = top_eigenpairs(
-                    den, y, sigma, k=sp["n_ev"], iters=sp["iters"],
-                    method=jc["method"], c=jc["c"], symmetrize=symmetrize)
+                try:
+                    eigvecs, eigvals, history, spectrum_diag = top_eigenpairs(
+                        den, y, sigma, k=sp["n_ev"], iters=sp["iters"],
+                        method=jc["method"], c=jc["c"], symmetrize=symmetrize,
+                        return_diagnostics=True)
+                except ValueError as e:
+                    # A too-asymmetric local Jacobian is a legitimate finding on some
+                    # real shapes (see docs/LOG.md 2026-09-16 graph-freezing audit) —
+                    # record it and move on instead of losing every later shape/sigma
+                    # to one rejection.
+                    m["top_eigenpairs_rejected"] = str(e)
+                    m["mse_noisy"] = float(((y - x) ** 2).mean())
+                    m["mse_denoised"] = float(((x_hat - x) ** 2).mean())
+                    m["seconds"] = time.time() - t0
+                    metrics[tag] = m
+                    torch.save({"x": x.cpu(), "y": y.cpu(), "x_hat": x_hat.cpu()},
+                              out / f"{tag}.pt")
+                    print(f"[{tag}] REJECTED by top_eigenpairs (too asymmetric)")
+                    with open(out / "metrics.json", "w") as f:
+                        json.dump(metrics, f, indent=2)
+                    continue
 
                 m.update({
                     "mse_noisy": float(((y - x) ** 2).mean()),
                     "mse_denoised": float(((x_hat - x) ** 2).mean()),
                     "eigvals": eigvals.cpu().tolist(),
                     "final_iter_overlap": history[-1].tolist(),
+                    "subspace_principal_angle_history_degrees": [
+                        angles.tolist()
+                        for angles in spectrum_diag["subspace_principal_angles_degrees"]
+                    ],
+                    "final_subspace_max_angle_degrees": float(
+                        spectrum_diag["subspace_principal_angles_degrees"][-1].max()),
+                    "ritz_relative_residuals": spectrum_diag["ritz_relative_residuals"].tolist(),
                     "psd": psd_report(eigvals.cpu()),
+                    "covariance_kind": den.covariance_kind,
                     # asymmetry of J restricted to the uncertainty subspace
                     "antisym_energy_subspace": antisym_energy_fd(
                         den, y, eigvecs, method=jc["method"], c=jc["c"]),
                 })
+                m["trustworthy"] = is_trustworthy(m)
                 if si == 0:  # per-sigma diagnostics, once on the first shape
                     sweep = sweep_step_size if analytic else sweep_step_size_fd
                     m["step_size_sweep"] = sweep(den, y, dg["step_size_sweep"],
@@ -130,7 +174,8 @@ def main() -> None:
             metrics[tag] = m
             torch.save({"x": x.cpu(), "y": y.cpu(), "x_hat": x_hat.cpu(),
                         "eigvecs": eigvecs.cpu(), "eigvals": eigvals.cpu(),
-                        "overlap_history": history}, out / f"{tag}.pt")
+                        "overlap_history": history, "spectrum_diagnostics": spectrum_diag},
+                       out / f"{tag}.pt")
             plot_modes(x_hat, eigvecs, eigvals, out / f"{tag}_modes.png")
             plot_mode_sweep(x_hat, eigvecs[0], eigvals[0], out / f"{tag}_mode0_sweep.png")
             print(f"[{tag}] {m['seconds']:.1f}s | mse {m['mse_noisy']:.2e}->"

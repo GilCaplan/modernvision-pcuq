@@ -1,0 +1,53 @@
+{
+ "source": "docs/LOG.md 2026-09-16 'Full n=50 confirmation' entry",
+ "raw_artifacts": "results/metrics/raw/gpu__run_experiment.json \u2014 PRESENT (this re-run's raw metrics.json was archived, not lost)",
+ "design": "Same 50 shapes x 5 categories as calibration_by_sigma above, re-run under the 2026-09-16 pipeline: Rayleigh-Ritz eigensolver with a symmetry-gate rejection (task 2/4), graph_topology_frozen default (task 6, was graph_frozen/'full' for the entry above), composite 'trustworthy' flag (task 9: not rejected AND convergence>=0.9 AND max Ritz residual<=0.15, see pcuq.diagnostics.is_trustworthy). sigma=0.03 not re-run.",
+ "training_sigma_range": [
+  0.004,
+  0.034
+ ],
+ "rows": [
+  {
+   "sigma": 0.01,
+   "median_lam0_over_sigma2": 1.079,
+   "n_negative_eigvals": 1,
+   "median_convergence": 0.9985,
+   "antisym_energy": 0.001,
+   "lam0_over_sigma2_range": [
+    1.03,
+    1.56
+   ],
+   "rejected": "5/50 (10%)",
+   "trustworthy": "43/50 (86%)"
+  },
+  {
+   "sigma": 0.02,
+   "median_lam0_over_sigma2": 1.396,
+   "n_negative_eigvals": 2,
+   "median_convergence": 0.996,
+   "antisym_energy": 0.0079,
+   "lam0_over_sigma2_range": [
+    1.19,
+    1.9
+   ],
+   "rejected": "8/50 (16%)",
+   "trustworthy": "36/50 (72%)"
+  },
+  {
+   "sigma": 0.05,
+   "median_lam0_over_sigma2": -0.533,
+   "n_negative_eigvals": 156,
+   "median_convergence": 0.6161,
+   "antisym_energy": 0.0093,
+   "lam0_over_sigma2_range": [
+    -7.18,
+    6.52
+   ],
+   "beyond_training_range": true,
+   "rejected": "13/50 (26%)",
+   "trustworthy": "8/50 (16%)",
+   "note": "26% rejected outright, but a further 58% pass the symmetry gate and are STILL not trustworthy (poor convergence or high Ritz residual) -- the rejection rate alone badly understates the breakdown at this sigma; trustworthy is the number to quote, see LOG.md"
+  }
+ ],
+ "vs_calibration_by_sigma": "in-distribution medians (0.01, 0.02) replicate the entry above almost exactly despite the pipeline changes; sigma=0.05 moved from a badly-non-converged 0.72 (conv 0.408) to a better-converged but more decisively negative -0.533 (conv 0.616) -- same conclusion (breaks down out of range), stronger evidence. Neither the rejected-shape fraction (10-26%) nor the trustworthy fraction (86%/72%/16%) existed as a measurable quantity before this pipeline version -- both are new, not moved numbers."
+}

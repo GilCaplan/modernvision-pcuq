@@ -20,6 +20,14 @@ denoiser:
   repo: external/Noise2Score3D
   checkpoint: data/checkpoints/noise2score3d_step4500.pth
   freeze_graph: true    # differentiate the smooth branch (see LOG.md 2026-08-17)
+  graph_freeze_variant: topology  # full | topology -- full freezes coarse-level
+    # point COORDINATES too (fewer degrees of freedom to vary; the original
+    # approach); topology only freezes discrete voxel/radius-search membership
+    # and recomputes coarse coordinates as voxel means of the perturbed input.
+    # 2026-09-16 audit (scripts/audit_graph_freezing.py, 3 real shapes): topology
+    # was never rejected by top_eigenpairs' symmetry gate, full was rejected on
+    # 2/3 -- see docs/LOG.md. Sets the new default; override to `full` for parity
+    # with pre-2026-09-16 Phase 3/3.5 numbers.
 
 jacobian:
   method: central       # forward | central | autograd
@@ -38,3 +46,28 @@ diagnostics:
   check_equivariance: true
   step_size_sweep: [1.0e-2, 1.0e-3, 1.0e-4, 1.0e-5]
   compare_autograd: true
+
+# Side quest (scripts/run_depth2d.py): ModelNet40 shapes rendered to depth-map
+# images, run through the reference paper's OWN 2D denoiser instead of
+# Noise2Score3D — a cross-domain benchmark. Independent of `data:` above so it
+# doesn't disturb the main 3D pipeline's config.
+depth2d:
+  denoiser: mnist       # mnist | ffhq -- mnist needs no extra download; see WORKFLOW.md
+  repo: external/GaussianDenoisingPosterior
+  dataset:
+    root: data
+    n_shapes: 50          # matches gpu.yaml's scale; still cheap enough for CPU (MNIST)
+    n_points: 2048
+    categories: [chair, airplane, table, lamp, guitar]   # mirrors gpu.yaml's set
+  render:
+    axis: 2             # projection axis post unit-sphere normalization: 0=x,1=y,2=z
+    dilate: 1            # z-buffer hole-filling rounds (point clouds render sparse)
+  ffhq:
+    from_t: 100          # DDPM timestep (unused for mnist)
+  spectrum:
+    n_ev: 2
+    iters: 25             # run_fullspectrum2d.py needed 40 for this same MNIST CNN;
+                          # depth maps push its Jacobian even harder, so don't skimp
+  jacobian:
+    method: autograd     # both wrapped denoisers are smooth CNNs; exact JVPs
+    c: 1.0e-3             # only used if method != autograd
