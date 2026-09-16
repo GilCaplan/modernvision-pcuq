@@ -23,6 +23,7 @@ import torch
 
 from pcuq.data import corrupt, extremity_patch_masks, load_modelnet
 from pcuq.denoisers import Noise2Score3DWrapper
+from pcuq.diagnostics import is_trustworthy
 from pcuq.spectrum import top_eigenpairs
 from pcuq.utils import apply_overrides, get_device, load_config, make_out_dir, set_seed
 from pcuq.viz import plot_mode_arrows, plot_mode_sweep, plot_modes
@@ -53,6 +54,8 @@ def main() -> None:
     metrics_path = out / "metrics.json"
     metrics = {} if args.fresh or not metrics_path.exists() \
         else json.loads(metrics_path.read_text())
+    metrics["_provenance"] = {"checkpoint_sha256": den.checkpoint_sha256,
+                              "checkpoint_path": cfg["denoiser"]["checkpoint"]}
     for sigma in cfg["data"]["sigmas"]:
         den.sigma = sigma
         for si, (name, x) in enumerate(shapes):
@@ -66,12 +69,33 @@ def main() -> None:
                     continue
                 t0 = time.time()
                 freeze = cfg["denoiser"]["freeze_graph"]
-                with den.graph_frozen() if freeze else contextlib.nullcontext():
+                freeze_variant = cfg["denoiser"].get("graph_freeze_variant", "full")
+                if not freeze:
+                    graph_ctx = contextlib.nullcontext()
+                elif freeze_variant == "topology":
+                    graph_ctx = den.graph_topology_frozen()
+                else:
+                    graph_ctx = den.graph_frozen()
+                with graph_ctx:
                     with torch.no_grad():
                         x_hat = den(y[None])[0]  # anchor (fills graph cache)
-                    eigvecs, eigvals, history = top_eigenpairs(
-                        den, y, sigma, k=sp["n_ev"], iters=sp["iters"],
-                        method=jc["method"], c=jc["c"], mask=mask.to(device))
+                    try:
+                        eigvecs, eigvals, history, spectrum_diag = top_eigenpairs(
+                            den, y, sigma, k=sp["n_ev"], iters=sp["iters"],
+                            method=jc["method"], c=jc["c"], mask=mask.to(device),
+                            return_diagnostics=True)
+                    except ValueError as e:
+                        # A too-asymmetric local Jacobian is a legitimate finding on
+                        # some real shapes/regions (docs/LOG.md 2026-09-16) — record
+                        # it and move on instead of losing every later region to one.
+                        metrics[tag] = {"top_eigenpairs_rejected": str(e),
+                                        "mask_points": int(mask.sum()),
+                                        "seconds": time.time() - t0}
+                        torch.save({"x_hat": x_hat.cpu(), "mask": mask}, out / f"{tag}.pt")
+                        print(f"[{tag}] REJECTED by top_eigenpairs (too asymmetric)")
+                        with open(metrics_path, "w") as f:
+                            json.dump(metrics, f, indent=2)
+                        continue
 
                 ev = eigvals.cpu()
                 spread = float((ev[0] - ev[-1]) / ev[0].clamp(min=1e-30))
@@ -79,11 +103,21 @@ def main() -> None:
                     "eigvals": ev.tolist(),
                     "spread_top_to_last": spread,
                     "final_iter_overlap": history[-1].tolist(),
+                    "subspace_principal_angle_history_degrees": [
+                        angles.tolist()
+                        for angles in spectrum_diag["subspace_principal_angles_degrees"]
+                    ],
+                    "final_subspace_max_angle_degrees": float(
+                        spectrum_diag["subspace_principal_angles_degrees"][-1].max()),
+                    "ritz_relative_residuals": spectrum_diag["ritz_relative_residuals"].tolist(),
+                    "covariance_kind": den.covariance_kind,
                     "mask_points": int(mask.sum()),
                     "seconds": time.time() - t0,
                 }
+                metrics[tag]["trustworthy"] = is_trustworthy(metrics[tag])
                 torch.save({"x_hat": x_hat.cpu(), "eigvecs": eigvecs.cpu(),
-                            "eigvals": ev, "mask": mask}, out / f"{tag}.pt")
+                            "eigvals": ev, "mask": mask,
+                            "spectrum_diagnostics": spectrum_diag}, out / f"{tag}.pt")
                 plot_modes(x_hat, eigvecs, eigvals, out / f"{tag}_modes.png",
                            mask=mask)
                 plot_mode_sweep(x_hat, eigvecs[0], eigvals[0],

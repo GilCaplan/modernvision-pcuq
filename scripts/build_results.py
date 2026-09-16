@@ -47,17 +47,46 @@ def style(ax, title):
 def by_sigma(metrics):
     out = {}
     for tag, m in metrics.items():
+        if tag.startswith("_") or "sigma" not in tag:
+            continue  # e.g. "_provenance" -- a run-level key, not a per-shape tag
         sig = float(tag.split("sigma")[1].split("_")[0])
         out.setdefault(sig, []).append(m)
     return dict(sorted(out.items()))
 
 
+def _trustworthy(m: dict, min_convergence: float = 0.9,
+                 max_ritz_residual: float = 0.15) -> bool:
+    """Mirrors pcuq.diagnostics.is_trustworthy (task 9) -- duplicated rather than
+    imported so this numpy/matplotlib-only script doesn't need to import torch.
+    Keep thresholds in sync with that function if they ever change."""
+    if "trustworthy" in m:
+        return m["trustworthy"]
+    if "ritz_relative_residuals" not in m:
+        return False  # older metrics.json predates this diagnostic
+    return (min(m["final_iter_overlap"]) >= min_convergence
+           and max(m["ritz_relative_residuals"]) <= max_ritz_residual)
+
+
 def chart_calibration(phase3):
-    """Top eigenvalue / sigma^2 per shape, across noise levels."""
+    """Top eigenvalue / sigma^2 per shape, across noise levels.
+
+    Noise2Score3D is an unconditioned score network with sigma manually
+    substituted into Tweedie's formula (covariance_kind =
+    frozen_pyramid_sensitivity, see src/pcuq/denoisers.py) -- there is no
+    per-sigma verification that it is the MMSE denoiser AT that sigma, so this
+    is sigma^2*J behaving like a sensitivity operator across noise levels, not
+    a calibration sweep of a proven fixed-sigma estimator (docs/LOG.md
+    2026-09-16). A run top_eigenpairs rejects outright (too asymmetric to call
+    covariance eigenpairs at all) is excluded from the stats below and counted
+    separately -- silently including those, as the pre-2026-09-16 pipeline did,
+    overstates how uniformly trustworthy any of this is.
+    """
     groups = by_sigma(phase3)
     fig, ax = plt.subplots(figsize=(6.4, 3.6))
     rng = np.random.default_rng(0)
-    for i, (sig, runs) in enumerate(groups.items()):
+    ok_groups = {sig: [m for m in runs if "top_eigenpairs_rejected" not in m]
+                for sig, runs in groups.items()}
+    for i, (sig, runs) in enumerate(ok_groups.items()):
         vals = np.array([m["eigvals"][0] / sig**2 for m in runs])
         shown = np.clip(vals, -2, 4)
         x = i + rng.uniform(-0.13, 0.13, len(vals))
@@ -68,21 +97,25 @@ def chart_calibration(phase3):
             ax.annotate(f"{n_clip} shapes\nbeyond view", (i + 0.26, 3.6),
                         fontsize=7, color=INK2)
     ax.axhline(1.0, color=GRAY, lw=1.2, ls="--")
-    ax.annotate("exact-MMSE bound (λ₀ = σ²)", (-0.45, 0.72), fontsize=8, color=INK2)
+    ax.annotate("sigma^2 bound if this were exact MMSE (lambda0 = sigma^2)",
+               (-0.45, 0.72), fontsize=8, color=INK2)
     labels = []
     for sig in groups:
         labels.append(f"σ={sig}" + ("\n(beyond training\nrange σ≤0.034)"
                                     if sig > TRAIN_SIGMA_MAX else ""))
     ax.set_xticks(range(len(groups)), labels)
     ax.set_ylabel("top eigenvalue / σ²", fontsize=9, color=INK)
-    style(ax, "Calibration: top eigenvalue vs the σ² bound (dot = shape, bar = median)")
+    style(ax, "Sensitivity vs noise level: top eigenvalue / σ² (dot = shape, "
+              "bar = median; rejected shapes excluded, see table)")
     fig.tight_layout()
     fig.savefig(FIG / "calibration_vs_sigma.png", dpi=170)
     plt.close(fig)
-    return {sig: (float(np.median([m["eigvals"][0] / sig**2 for m in runs])),
+    return {sig: (float(np.median([m["eigvals"][0] / sig**2 for m in runs])) if runs else None,
                   sum(1 for m in runs for v in m["eigvals"] if v < 0),
-                  float(np.median([min(m["final_iter_overlap"]) for m in runs])))
-            for sig, runs in groups.items()}
+                  float(np.median([min(m["final_iter_overlap"]) for m in runs])) if runs else None,
+                  len(groups[sig]) - len(runs), len(groups[sig]),
+                  sum(1 for m in groups[sig] if _trustworthy(m)))
+            for sig, runs in ok_groups.items()}
 
 
 def chart_ablation(frozen_runs, unfrozen_runs, sigma):
@@ -122,9 +155,11 @@ def chart_structure(phase3, masked):
     for sig in (0.02, 0.03):
         whole = [(m["eigvals"][0] - m["eigvals"][2]) / m["eigvals"][0]
                  for m in by_sigma(phase3).get(sig, [])
-                 if min(m["final_iter_overlap"]) > 0.9 and m["eigvals"][2] > 0]
+                 if "top_eigenpairs_rejected" not in m
+                 and min(m["final_iter_overlap"]) > 0.9 and m["eigvals"][2] > 0]
         region = [m["spread_top_to_last"] for m in by_sigma(masked).get(sig, [])
-                  if min(m["final_iter_overlap"]) > 0.9 and m["eigvals"][-1] > 0]
+                  if "top_eigenpairs_rejected" not in m
+                  and min(m["final_iter_overlap"]) > 0.9 and m["eigvals"][-1] > 0]
         for vals, color, name in ((whole, BLUE, "whole shape"),
                                   (region, AQUA, "extremity region")):
             if not vals:
@@ -146,11 +181,17 @@ def chart_structure(phase3, masked):
     plt.close(fig)
 
 
-def pick_exemplars(masked, n=6):
-    """Best converged, high-spread, PSD region runs — one per (category, sigma)."""
+def pick_exemplars(masked, masked_src, n=6):
+    """Best converged, high-spread, PSD, TRUSTWORTHY region runs — one per
+    (category, sigma). `trustworthy` (task 9, pcuq.diagnostics.is_trustworthy) is
+    required in addition to the original convergence/PSD bar: it also catches the
+    symmetry-gate/Ritz-residual failure modes those two checks alone miss (see
+    docs/LOG.md 2026-09-16) -- exemplars predating that flag were never checked
+    against it."""
     scored = []
     for tag, m in masked.items():
-        if min(m["final_iter_overlap"]) >= 0.95 and m["eigvals"][-1] > 0:
+        if (m.get("trustworthy", False) and min(m["final_iter_overlap"]) >= 0.95
+                and m["eigvals"][-1] > 0):
             scored.append((m["spread_top_to_last"], tag))
     scored.sort(reverse=True)
     picked, seen = [], set()
@@ -162,30 +203,49 @@ def pick_exemplars(masked, n=6):
         picked.append((tag, spread))
         if len(picked) == n:
             break
-    src = ROOT / "outputs/masked/masked_modes"
     for tag, _ in picked:
         for suffix in ("modes", "mode0_arrows", "mode0_sweep"):
-            f = src / f"{tag}_{suffix}.png"
+            f = masked_src / f"{tag}_{suffix}.png"
             if f.exists():
                 shutil.copy(f, FIG / f.name)
     return picked
 
 
+def _load_unfrozen_ablation(path: str):
+    """outputs/<x>/run_experiment/metrics.json is a generic smoke-test scratch
+    location -- it can (and, mid-2026-09, did) hold whatever was last run there:
+    toy-analytic data, or real-model data with freezing ON. covariance_kind alone
+    can't tell frozen from unfrozen real-model runs apart (both are
+    frozen_pyramid_sensitivity), so this only trusts a directory as genuinely
+    "the unfrozen ablation" if its sibling config.json (written by make_out_dir)
+    confirms freeze_graph was actually off."""
+    metrics = load(path)
+    cfg = load(str(Path(path).parent / "config.json"))
+    if metrics is None or cfg is None or cfg.get("denoiser", {}).get("freeze_graph", True):
+        return None
+    return metrics
+
+
 def main() -> None:
     FIG.mkdir(parents=True, exist_ok=True)
-    phase3 = load("outputs/phase3/run_experiment/metrics.json")
-    masked = load("outputs/masked/masked_modes/metrics.json")
-    ablation = load("outputs/ablation-unfrozen/run_experiment/metrics.json") \
-        or load("outputs/local/run_experiment/metrics.json")  # early 10-shape grid
+    phase3 = load("outputs/phase3/run_experiment/metrics.json") \
+        or load("outputs/gpu/run_experiment/metrics.json")  # current profile name
+    masked_path = "outputs/masked/masked_modes/metrics.json"
+    masked = load(masked_path)
+    if masked is None:
+        masked_path = "outputs/gpu/masked_modes/metrics.json"  # current profile name
+        masked = load(masked_path)
+    ablation = _load_unfrozen_ablation("outputs/ablation-unfrozen/run_experiment/metrics.json")
     if phase3 is None:
         sys.exit("no phase3 results found — run the sweep first (docs/WORKFLOW.md)")
 
     calib = chart_calibration(phase3)
-    frozen02 = by_sigma(phase3)[0.02]
-    unfrozen02 = by_sigma(ablation)[0.02] if ablation else []
-    if unfrozen02:
+    frozen02 = [m for m in by_sigma(phase3)[0.02] if "top_eigenpairs_rejected" not in m]
+    unfrozen02 = [m for m in (by_sigma(ablation).get(0.02, []) if ablation else [])
+                 if "top_eigenpairs_rejected" not in m]
+    if unfrozen02 and frozen02:
         chart_ablation(frozen02, unfrozen02, 0.02)
-    exemplars = pick_exemplars(masked) if masked else []
+    exemplars = pick_exemplars(masked, (ROOT / masked_path).parent) if masked else []
     if masked:
         chart_structure(phase3, masked)
 
@@ -201,19 +261,47 @@ def main() -> None:
         "sampling — adapting Manor & Michaeli (ICLR 2024) from images to 3D "
         "point clouds (ModelNet40).",
         "",
-        "## 1. The method is calibrated — until the denoiser leaves its training range",
+        "## 1. Sensitivity vs noise level — in-range agreement with the σ² bound, with caveats",
         "",
         "![calibration](figures/calibration_vs_sigma.png)",
         "",
-        "Exact MMSE theory bounds posterior eigenvalues by σ². Per σ "
-        "(median top-eigval/σ² · negative eigvals · median convergence):",
+        "**Not a calibration sweep.** Noise2Score3D is an unconditioned score "
+        "network with σ manually substituted into Tweedie's formula at query "
+        "time — there is no per-σ verification that it is *the* MMSE denoiser "
+        "at that σ (`covariance_kind = frozen_pyramid_sensitivity`, see "
+        "`src/pcuq/denoisers.py`). σ²·J is a local sensitivity operator whose "
+        "behavior we track across noise levels, not a proven posterior "
+        "covariance being calibrated. Exact MMSE theory would bound its "
+        "eigenvalues by σ²; how closely this frozen network's sensitivity "
+        "tracks that bound in-range, and how it degrades out of range, is the "
+        "actual result. Per σ (median top-eigval/σ² · negative eigvals · "
+        "median convergence, over runs the symmetry gate accepted):",
         "",
-        "| σ | λ₀/σ² | negative eigvals | convergence |",
-        "|---|---|---|---|",
+        "| σ | λ₀/σ² | negative eigvals | convergence | rejected by symmetry gate | trustworthy |",
+        "|---|---|---|---|---|---|",
     ]
-    for sig, (med, neg, conv) in calib.items():
+    for sig, (med, neg, conv, n_rej, n_total, n_trust) in calib.items():
         note = " ⚠ beyond training range" if sig > TRAIN_SIGMA_MAX else ""
-        lines.append(f"| {sig}{note} | {med:.2f} | {neg} | {conv:.3f} |")
+        med_s = f"{med:.2f}" if med is not None else "—"
+        conv_s = f"{conv:.3f}" if conv is not None else "—"
+        lines.append(f"| {sig}{note} | {med_s} | {neg} | {conv_s} | "
+                     f"{n_rej}/{n_total} ({n_rej/n_total:.0%}) | "
+                     f"{n_trust}/{n_total} ({n_trust/n_total:.0%}) |")
+    lines += [
+        "",
+        "**`trustworthy`** (not rejected AND convergence ≥0.9 AND max Ritz "
+        "residual ≤0.15, `pcuq.diagnostics.is_trustworthy`) is the number to "
+        "quote — at σ=0.05 it's much lower than \"not rejected\" alone would "
+        "suggest, because most accepted runs there are still poorly converged. "
+        "A rejected run means the local Jacobian was too asymmetric for "
+        "`top_eigenpairs` to call its eigenpairs a covariance at all — the "
+        "pre-2026-09-16 pipeline never rejected anything, so these "
+        "contributed unlabeled, possibly-meaningless numbers into earlier "
+        "versions of this table (see docs/LOG.md 2026-09-16 entries). At the "
+        "highest σ here, most of the *accepted* runs are also poorly "
+        "converged — a bare median eigenvalue at that σ needs this context, "
+        "not just the number.",
+    ]
     lines += [
         "",
         "## 2. The 3D-specific obstacle: graph rebuilds, and the fix",
@@ -225,6 +313,14 @@ def main() -> None:
         "",
         "![ablation](figures/frozen_vs_rebuilt.png)",
         "",
+        "Freezing helps, but freezing *everything* (topology and coarse-level "
+        "point coordinates) turned out to be more than necessary: a weaker "
+        "`graph_topology_frozen` variant (topology fixed, coarse coordinates "
+        "recomputed from the perturbed input) is never rejected by the "
+        "symmetry gate across a real-shape audit where the fully-frozen "
+        "default was rejected on 2/3 shapes, and is now the default "
+        "(`denoiser.graph_freeze_variant`, docs/LOG.md 2026-09-16).",
+        "",
         "## 3. Uncertainty structure lives in regions, not whole shapes",
         "",
         "Whole-shape posteriors are near-isotropic (flat spectra). Restricting the "
@@ -233,6 +329,25 @@ def main() -> None:
         "",
         "![structure](figures/whole_vs_region_spread.png)",
         "",
+        "Flat whole-shape spectra aren't just a cosmetic near-tie: a 2026-09-16 "
+        "stability check re-noised 15 trustworthy whole-shape runs with a new "
+        "seed (same points) and found the top eigenVALUE stable (median ratio "
+        "0.95) but the reported top-5 eigenVECTOR subspace essentially "
+        "orthogonal to the original (median max principal angle 89.4°) — a "
+        "direct consequence of the near-degenerate spectrum (median 16.6% "
+        "top-to-5th spread) leaving the eigenbasis numerically ill-defined. "
+        "**Whole-shape mode *directions* are not a reproducible property of the "
+        "shape; only the top eigenvalue's magnitude is.** Point resampling was "
+        "far gentler (eigenvalue shift ~8%). The natural follow-up question — "
+        "are region-restricted modes more directionally stable, given their "
+        "less-degenerate spectra? — was tested and answered **no**: median max "
+        "subspace angle for regions under the identical new-seed check is "
+        "**89.34°**, statistically the same as whole-shape's 89.4°. "
+        "Region-restriction fixes eigenvalue spread; it does not fix direction "
+        "reproducibility. **Every mode-direction figure below should be read as "
+        "the mode for one specific noisy observation, not a reproducible "
+        "geometric property of the shape** (docs/LOG.md, docs/PLAN.md).",
+        "",
         "## 4. The modes themselves",
         "",
         "Best converged, PSD region runs (spread = top-to-last eigenvalue gap). "
@@ -240,18 +355,36 @@ def main() -> None:
         "x̂ ± t·√λ·v:",
         "",
     ]
-    for tag, spread in exemplars:
-        lines += [
-            f"### {tag}  (spread {spread:.0%})",
-            "",
-            f"![{tag} modes](figures/{tag}_modes.png)",
-            f"![{tag} arrows](figures/{tag}_mode0_arrows.png)",
-            f"![{tag} sweep](figures/{tag}_mode0_sweep.png)",
-            "",
-        ]
-    (OUT / "README.md").write_text("\n".join(lines))
+    if exemplars:
+        for tag, spread in exemplars:
+            lines += [
+                f"### {tag}  (spread {spread:.0%})",
+                "",
+                f"![{tag} modes](figures/{tag}_modes.png)",
+                f"![{tag} arrows](figures/{tag}_mode0_arrows.png)",
+                f"![{tag} sweep](figures/{tag}_mode0_sweep.png)",
+                "",
+            ]
+        n_exemplars = len(exemplars)
+    else:
+        # No outputs/masked/masked_modes/metrics.json to pick fresh exemplars from
+        # (a common state -- outputs/ is disposable scratch, see WORKFLOW.md).
+        # Silently regenerating an empty section 4 here would DELETE the existing
+        # exemplar galleries from the committed README instead of leaving them —
+        # this actually happened once (2026-09-16). Preserve whatever section 4
+        # the current file on disk already has instead of dropping it.
+        old = (OUT / "README.md").read_text(encoding="utf-8") if (OUT / "README.md").exists() else ""
+        marker = "\n### "  # first exemplar heading -- the section-4 intro
+                          # paragraph above is already in `lines`, don't duplicate it
+        if "## 4. The modes themselves" in old and marker in old:
+            lines += old[old.index(marker) + 1:].rstrip("\n").split("\n")
+            n_exemplars = old.count(marker)
+        else:
+            n_exemplars = 0
+    (OUT / "README.md").write_text("\n".join(lines), encoding="utf-8")
     print(f"results/ built: {len(list(FIG.glob('*.png')))} figures, "
-          f"README with {len(exemplars)} exemplars")
+          f"README with {n_exemplars} exemplars"
+          + (" (preserved from disk, no fresh masked-modes data)" if not exemplars else ""))
 
 
 if __name__ == "__main__":

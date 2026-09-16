@@ -1,0 +1,16 @@
+{
+ "source": "docs/LOG.md 2026-08-18 comprehensive-evidence entry",
+ "raw_artifacts": "outputs/masked_modes/ \u2014 LOST (distinct from the mask GRID in derived/region_runs.json: different regions per shape)",
+ "design": "60 region runs, 15 shapes x 2 sigmas x 2 regions",
+ "sigma_0.02": {
+  "converged_and_psd": 28,
+  "total": 30,
+  "max_spread": 0.33
+ },
+ "sigma_0.03": {
+  "converged_and_psd": 22,
+  "total": 30,
+  "median_spread": 0.12,
+  "max_spread": 0.31
+ }
+}

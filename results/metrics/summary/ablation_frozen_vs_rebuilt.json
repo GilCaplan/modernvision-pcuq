@@ -1,0 +1,15 @@
+{
+ "source": "docs/LOG.md 2026-08-18 comprehensive-evidence entry; results/figures/frozen_vs_rebuilt.png",
+ "raw_artifacts": "outputs/ablation-unfrozen/ \u2014 LOST",
+ "design": "15 shapes @ sigma=0.02, medians",
+ "graph_rebuilt": {
+  "lam0_over_sigma2": 2.91,
+  "antisym_energy": 0.34,
+  "convergence": 0.18
+ },
+ "graph_frozen": {
+  "lam0_over_sigma2": 1.39,
+  "antisym_energy": 0.009,
+  "convergence": 1.0
+ }
+}

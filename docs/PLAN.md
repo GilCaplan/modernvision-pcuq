@@ -58,6 +58,64 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 - [x] Convergence tracked per run (overlap history saved in each .pt)
 - [ ] Optional follow-ups: σ=0.03 run (breakdown boundary), unfrozen ablation slice
       at full scale for the A/B table
+- [x] Graph-freezing audit (small scale, 2026-09-16, see LOG.md): `graph_frozen`
+      (the freezing used for the 1.06σ² headline above) is REJECTED by
+      `top_eigenpairs`'s symmetry gate on 2/3 real shapes tested; a new, weaker
+      `graph_topology_frozen` variant (topology fixed, coarse coordinates continuous)
+      was never rejected and is now the default (`denoiser.graph_freeze_variant`).
+- [x] Partial re-run at n=15 shapes/sigma (2026-09-16, see LOG.md): in-distribution
+      headline (1.06σ² @ 0.01, 1.39σ² @ 0.02) replicates closely (1.10σ², 1.41σ²)
+      under the new default. New finding: **8/15 shapes (53%) get rejected by the
+      symmetry gate at >=1 sigma**, 20% at sigma=0.01 alone — invisible under the old
+      eigensolver, which never rejected anything. σ=0.05 (out of training range)
+      still breaks down, now with much better convergence (0.97 vs 0.41) — the old
+      number there was noisy, not more correct.
+- [x] Full n=50 confirmation (2026-09-16, see LOG.md): in-distribution headline
+      confirmed almost exactly (1.079σ²/1.396σ² vs old 1.06σ²/1.39σ²). Rejection
+      rate is real and monotonic with sigma: **10% / 16% / 26%** (0.01/0.02/0.05),
+      **44% of shapes (22/50) rejected at >=1 sigma**. sigma=0.05 correction: the
+      n=15 run's apparent convergence recovery (0.97) was a small-sample fluke — at
+      n=50 it's 0.616, and **65% of shapes that pass the symmetry gate at sigma=0.05
+      are still poorly converged (<0.9)**, so the real out-of-range breakdown is
+      worse and more pervasive than either the old number or the n=15 partial run
+      showed.
+- [x] sigma=0.05 reporting decided (2026-09-16, see LOG.md): added a composite
+      `trustworthy` flag (`pcuq.diagnostics.is_trustworthy` — not rejected AND
+      convergence>=0.9 AND max Ritz residual<=0.15). Headline: **86% / 72% / 16%
+      trustworthy at sigma=0.01/0.02/0.05** — quote this, not a bare median, for
+      sigma=0.05 in the report.
+- [x] Report reframed from "calibration" to "sensitivity vs noise level"
+      (`results/README.md` §1, `docs/PROJECT.md`'s math section) — Noise2Score3D has
+      no per-sigma proof of being the MMSE denoiser at each queried sigma. See
+      LOG.md 2026-09-16.
+- [x] Reproducibility artifacts (task 8): checkpoint SHA256 now recorded per run
+      (`Noise2Score3DWrapper.checkpoint_sha256`); the n=50 run's raw metrics.json is
+      archived to `results/metrics/raw/` (git-tracked), not left to become another
+      "LOST" entry.
+- [x] Task 9, second half (2026-09-16, see LOG.md): **whole-shape mode DIRECTIONS
+      are noise artifacts; magnitude is not.** 15 trustworthy sigma=0.02 shapes,
+      re-noised with a new seed: eigenvalue ratio stable (median 0.95) but median
+      max subspace angle vs. the original = **89.4 degrees** (essentially
+      orthogonal) — a mechanism for the flat-spectrum finding above, not just a
+      restatement: near-degenerate eigenvalues (median 16.6% top-to-5th spread) make
+      the reported eigenvectors numerically ill-defined. Point resampling is much
+      gentler (median eigenvalue shift ~8%, only 1/15 rejected vs. 3/15 for
+      reseeding). Whole-shape mode *direction* figures should not be presented as a
+      stable per-shape property in the report; magnitude (top eigval/sigma^2) can be.
+- [x] Follow-up run (2026-09-16, see LOG.md): does region-restricted mode direction
+      survive a new noise seed better than whole-shape? **No — tested and rejected.**
+      Median max subspace angle for regions = **89.34 degrees**, statistically the
+      same as whole-shape's 89.4 degrees. Region-restriction fixes eigenvalue
+      spread/degeneracy (Phase 3.5's finding stands), but does NOT fix eigenvector-
+      direction reproducibility across noise seeds — a genuine negative result, not
+      the improvement predicted. Every mode-direction figure in the report (whole-
+      shape or region) should be captioned as "for one specific noisy observation,"
+      not a reproducible per-shape property.
+- [x] Region-mode exemplars (results/README.md §4) refreshed under the current
+      pipeline and `trustworthy`-filtered (2026-09-16) — the 6 pre-fix exemplars
+      were never checked against any of this session's corrections. New set: 5
+      exemplars, all sigma=0.02 (diversity across sigma traded for validation;
+      restoring it needs another run, not done here).
 
 ## Phase 3.5 — Masked (region-restricted) uncertainty modes — **the missing half**
 
@@ -86,6 +144,42 @@ geometric uncertainty modes for shape *regions*.
 - [ ] Quantitative tables: eigenvalue spectra vs σ; validation-gate results
 - [ ] Failure cases + discussion (where the linearization breaks)
 - [ ] Write-up / figures
+
+## Side quest — depth-map 2D benchmark (not started)
+
+Different from Phase 4's image-domain comparison (which runs the reference paper's
+own denoisers on *their* MNIST/FFHQ images for a like-for-like sanity check). This
+takes OUR ModelNet40 shapes, renders each to a single-view depth-map image, and runs
+the reference paper's own 2D denoiser on that image — testing the original method
+out of its training domain (digits/faces) on a depth-map "photo" of a 3D shape.
+
+- [x] Design + `pcuq.depth.render_depth_map` (single-view orthographic z-buffer,
+      tests are pure-synthetic, no download needed) + `scripts/run_depth2d.py` +
+      `depth2d:` config block in both profiles (local: MNIST CNN, no extra download;
+      gpu: FFHQ DDPM, needs `ffhq.pt`)
+- [x] **Gate:** `run_depth2d.py --config configs/local.yaml` scaled to 50 shapes ×
+      5 categories, MNIST CNN — 2026-09-11: converged (median overlap 1.000), **~50%
+      of shapes have a negative eigenvalue**, mostly LOW antisym (unlike the 3D
+      noise-range breakdown, which is high-antisym) — a systematic, different-
+      mechanism breakdown signature. Explicit decision: stay training-free/frozen-
+      model (asked & answered) rather than fit a depth-map-specific denoiser.
+- [x] Robustness check: swept `depth2d.render.axis`/`dilate` — the ~50% negative-
+      eigenvalue rate and low antisym are stable across renderings (44-52%); the
+      *magnitude* (median eigval/σ², fully-negative %) is NOT — 8.9/16% (baseline)
+      vs 86.3/2% (no hole-filling). Report the qualitative pattern as the finding;
+      quote severity numbers with their render config attached, see LOG.md.
+- [ ] Decide if depth maps need per-shape intensity/contrast normalization before
+      the reference denoiser's fixed training sigma is meaningful on them
+- [ ] Re-tally the ~50%/44-52% non-PSD rate above under the 2026-09-16 pipeline fixes
+      (LOG.md): the old eigensolver never rejected anything, so a subset of those
+      shapes were actually antisym~1 (near-orthogonal Jv/J^Tv, essentially garbage,
+      3/10 in a small resample) rather than the mild low-antisym breakdown the 44-52%
+      figure describes — two tiers, not one; the report should split them
+- [ ] Track down `ffhq.pt`'s exact source (not recorded anywhere in the repo — a
+      pre-existing gap) if a natural-image comparison point is wanted
+- [ ] Qualitative + eigval/σ² comparison against the in-domain 3D result; viewer
+      integration is a separate follow-up (results/viewer_data_2d.json's schema is
+      currently contested between two existing scripts — see LOG.md)
 
 ## Open questions (move to LOG.md when resolved)
 

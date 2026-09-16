@@ -1,0 +1,9 @@
+{
+ "source": "docs/LOG.md 2026-08-18 two-domain entry",
+ "design": "30 regions @ sigma=0.03, graph rebuilt (naive port)",
+ "converged": 3,
+ "total": 30,
+ "with_negative_eigvals": 11,
+ "median_lam0_over_sigma2": 4,
+ "note": "per-run rows for these 30 are recoverable in derived/region_runs.json (method='naive')"
+}

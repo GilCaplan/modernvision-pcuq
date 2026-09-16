@@ -61,6 +61,80 @@ class ToyGaussian:
         return vecs, vals[:k]
 
 
+class ToyGMM:
+    """Gaussian-mixture prior X ~ sum_k pi_k N(mu_k, Sigma_k), Sigma_k = U_k
+    diag(lams_k) U_k^T known per component (own random eigenbasis each, so the
+    mixture is genuinely non-Gaussian/multimodal, not just a single rotated blob).
+
+    For Y = X + sigma*Z the posterior is a mixture of the per-component linear-
+    Gaussian posteriors, weighted by the Bayes responsibility of each component
+    given y (softmax over per-component log-marginals) -- see
+    posterior_mean_and_cov. Unlike ToyGaussian, Cov[X|Y] is NOT constant in y:
+    mode-membership ambiguity near the boundary between two components' means
+    injects a between-component term that pushes eigenvalues above the single-
+    Gaussian sigma^2*lam/(lam+sigma^2) <= sigma^2 bound. This is the ground truth
+    AnalyticGMMDenoiser matches exactly, and the point of this toy (see LOG.md).
+    """
+
+    def __init__(self, pi: torch.Tensor, mu: torch.Tensor, U: torch.Tensor,
+                lams: torch.Tensor):
+        self.log_pi = pi.log()  # (K,)
+        self.mu = mu            # (K, N, 3) component means
+        self.U = U              # (K, 3N, 3N) orthogonal, per-component eigenbasis
+        self.lams = lams        # (K, 3N) per-component eigenvalues, descending
+
+    @property
+    def n_components(self) -> int:
+        return self.log_pi.numel()
+
+    def sample(self, n_shapes: int, seed: int) -> torch.Tensor:
+        gen = torch.Generator(device="cpu").manual_seed(seed)
+        comps = torch.multinomial(self.log_pi.softmax(dim=0), n_shapes,
+                                  replacement=True, generator=gen)
+        d = self.lams.shape[1]
+        z = torch.randn(n_shapes, d, generator=gen, dtype=self.mu.dtype)
+        mu_flat = self.mu.reshape(self.n_components, -1)
+        out = mu_flat[comps] + torch.einsum(
+            "bd,bde->be", z * self.lams[comps].clamp(min=0).sqrt(), self.U[comps])
+        return out.reshape(n_shapes, *self.mu.shape[1:])
+
+    def _responsibilities_and_component_means(self, y: torch.Tensor, sigma: float):
+        """Single anchor y (N, 3) -> (r (K,), m (K, d) per-component posterior
+        means, gains (K, d)). Shared by posterior_mean_and_cov and used to verify
+        AnalyticGMMDenoiser.denoise implements exactly this formula."""
+        yf = y.reshape(-1)
+        var = self.lams + sigma**2                                   # (K, d)
+        gains = self.lams / var                                       # (K, d)
+        mu_flat = self.mu.reshape(self.n_components, -1)
+        resid = yf[None, :] - mu_flat                                 # (K, d)
+        z = torch.einsum("kd,kde->ke", resid, self.U)                 # coords in U_k
+        log_marg = self.log_pi - 0.5 * ((z**2 / var).sum(-1)
+                                        + torch.log(2 * math.pi * var).sum(-1))
+        r = log_marg.softmax(dim=0)                                    # (K,)
+        m = mu_flat + torch.einsum("kde,ke->kd", self.U, gains * z)    # (K, d)
+        return r, m, gains
+
+    def posterior_mean_and_cov(self, y: torch.Tensor, sigma: float):
+        """Exact posterior mean (N, 3) and dense covariance Cov[X|Y=y] (d, d) at
+        anchor y, via the law of total covariance over the responsibility-weighted
+        per-component posteriors: Cov[X|Y] = E_k[C_k] + Cov_k[m_k(Y)]."""
+        r, m, gains = self._responsibilities_and_component_means(y, sigma)
+        mean = (r[:, None] * m).sum(0)
+        C = torch.einsum("kde,ke,kfe->kdf", self.U, sigma**2 * gains, self.U)
+        delta = m - mean[None, :]
+        cov = (r[:, None, None] * C).sum(0) + torch.einsum("k,kd,ke->de", r, delta, delta)
+        return mean.reshape(self.mu.shape[1:]), cov
+
+    def posterior_eigenpairs(self, y: torch.Tensor, sigma: float, k: int):
+        """Top-k eigenpairs of Cov[X|Y=y] in closed form -> (vecs (k,N,3), vals (k,)).
+        Anchor-dependent (see class docstring), unlike ToyGaussian's version."""
+        _, cov = self.posterior_mean_and_cov(y, sigma)
+        vals, vecs = torch.linalg.eigh((cov + cov.T) / 2)
+        vals, idx = vals.sort(descending=True, stable=True)
+        vecs = vecs[:, idx[:k]].T.reshape(k, *self.mu.shape[1:])
+        return vecs, vals[:k]
+
+
 def _parse_off(text: str):
     """Parse an OFF mesh -> (verts (V, 3) float64, faces (F, 3) long).
 
@@ -194,3 +268,37 @@ def make_toy_gaussian(n_points: int, seed: int, dtype: torch.dtype = torch.float
     lams = amp * torch.pow(torch.tensor(decay, dtype=torch.float64), torch.arange(d))
 
     return ToyGaussian(mu.to(dtype), U.to(dtype), lams.to(dtype))
+
+
+def make_toy_gmm(n_points: int, seed: int, dtype: torch.dtype = torch.float32,
+                 n_components: int = 3, amp: float = 1e-2, decay: float = 0.1,
+                 mean_sep: float = 0.05) -> ToyGMM:
+    """K equal-weight components around a shared base shape: same decay spectrum
+    as make_toy_gaussian (well-gapped, fast convergence) but each component gets
+    its own random eigenbasis (genuinely non-Gaussian mixture, not one rotated
+    blob), means offset by mean_sep in independent random directions.
+
+    mean_sep is chosen comparable to this project's typical sigmas (~0.01-0.05):
+    far enough apart to be clearly multimodal, close enough that an anchor between
+    two component means is a realistic ambiguous case, not a contrived one.
+    """
+    base = fibonacci_sphere(n_points, radius=0.5).reshape(-1).to(torch.float64)
+    d = 3 * n_points
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+
+    lams = amp * torch.pow(torch.tensor(decay, dtype=torch.float64), torch.arange(d))
+    lams = lams[None, :].expand(n_components, -1).clone()
+
+    U_list, mu_list = [], []
+    for _ in range(n_components):
+        G = torch.randn(d, d, generator=gen, dtype=torch.float64)
+        Uk, _ = torch.linalg.qr(G)
+        U_list.append(Uk)
+        offset = torch.randn(d, generator=gen, dtype=torch.float64)
+        mu_list.append(base + offset / offset.norm() * mean_sep)
+
+    pi = torch.full((n_components,), 1 / n_components, dtype=torch.float64)
+    mu = torch.stack(mu_list).reshape(n_components, n_points, 3)
+    U = torch.stack(U_list)
+
+    return ToyGMM(pi.to(dtype), mu.to(dtype), U.to(dtype), lams.to(dtype))
