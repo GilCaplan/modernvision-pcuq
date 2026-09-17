@@ -67,3 +67,11 @@ Best converged, PSD region runs (spread = top-to-last eigenvalue gap). Per exemp
 ![guitar_0156_sigma0.02_r0 modes](figures/guitar_0156_sigma0.02_r0_modes.png)
 ![guitar_0156_sigma0.02_r0 arrows](figures/guitar_0156_sigma0.02_r0_mode0_arrows.png)
 ![guitar_0156_sigma0.02_r0 sweep](figures/guitar_0156_sigma0.02_r0_mode0_sweep.png)
+
+## 5. Side quest: shapes as depth-map images
+
+`scripts/run_depth2d.py` (docs/LOG.md 2026-09-11/16) renders each ModelNet40 shape into a single-view depth-map image and runs it through the reference paper's OWN 2D denoiser (MNIST CNN or FFHQ DDPM) instead of Noise2Score3D — a cross-domain comparison: what happens to the reference method's own uncertainty estimate when fed a photo of a 3D shape instead of a digit or a face? (chair_0890, table_0393, guitar_0156 shown here, at the resolution each denoiser actually receives):
+
+![depth projections](figures/depth_projection_examples.png)
+
+The 28x28 MNIST-scale image is genuinely this blocky — a full point cloud compressed to fewer pixels than it has dimensions of variation. Finding: roughly half of shapes at this scale produce a non-PSD implied covariance (negative eigenvalues) under the frozen MNIST CNN, via a *low-antisymmetry* mechanism distinct from the 3D noise-range breakdown above — and a sharper failure mode (pipeline fix, 2026-09-16): ~30% of shapes are rejected outright as too asymmetric to call a covariance at all, which the original eigensolver couldn't detect. See docs/LOG.md for the full numbers.
