@@ -15,6 +15,7 @@ We adapt Manor & Michaeli (ICLR 2024), which did this for 2D images, to unstruct
 | [docs/PLAN.md](docs/PLAN.md) | Phased roadmap with checkboxes — **the living to-do list** |
 | [docs/CODE_STRUCTURE.md](docs/CODE_STRUCTURE.md) | Module map, design rules, what goes where |
 | [docs/WORKFLOW.md](docs/WORKFLOW.md) | How we work: local-Mac smoke runs vs GPU-VM full runs, scale profiles |
+| [docs/SMOOTH_MODES.md](docs/SMOOTH_MODES.md) | Run smooth deformation uncertainty, inspect figures, and load saved modes |
 | [docs/SOURCES.md](docs/SOURCES.md) | Papers, repos, datasets, checkpoints |
 | [docs/LOG.md](docs/LOG.md) | Append-only experiment & decision log |
 | [external/README.md](external/README.md) | What's vendored and what we actually use from it |

@@ -23,9 +23,66 @@ from pcuq.data import corrupt, load_modelnet, make_toy_gaussian
 from pcuq.denoisers import AnalyticGaussianDenoiser, Noise2Score3DWrapper
 from pcuq.diagnostics import (antisym_energy, antisym_energy_fd, check_equivariance,
                               psd_report, sweep_step_size, sweep_step_size_fd)
-from pcuq.spectrum import top_eigenpairs
+from pcuq.spectrum import smooth_eigenpairs, top_eigenpairs
 from pcuq.utils import apply_overrides, get_device, load_config, make_out_dir, set_seed
-from pcuq.viz import plot_mode_sweep, plot_modes
+from pcuq.viz import plot_mode_arrows, plot_mode_sweep, plot_modes
+
+
+def run_smooth(den, x, sigma, shape_index, cfg, out, tag, freeze, fresh=False):
+    """Independent smooth artifacts: baseline completion never skips this stage."""
+    sp, jc = cfg["spectrum"], cfg["jacobian"]
+    smooth = sp.get("smooth", {})
+    if not smooth.get("enabled", False):
+        return None
+    settings = {"version": 1, "seed": cfg["seed"], "data": cfg["data"],
+                "denoiser": cfg["denoiser"], "dtype": str(x.dtype),
+                "device": str(x.device), "sigma": sigma, "shape_index": shape_index,
+                "n_ev": sp["n_ev"], "jacobian": jc,
+                "n_basis": smooth.get("n_basis", 30),
+                "n_neighbors": smooth.get("n_neighbors", 16)}
+    checkpoint = Path(cfg["denoiser"].get("checkpoint", ""))
+    if cfg["denoiser"]["kind"] != "analytic_gaussian" and checkpoint.is_file():
+        stat = checkpoint.stat()
+        settings["checkpoint_identity"] = [str(checkpoint.resolve()), stat.st_size, stat.st_mtime_ns]
+    path = out / f"{tag}_smooth.pt"
+    if not fresh and path.exists():
+        saved = torch.load(path, map_location="cpu", weights_only=True)
+        if (saved.get("settings") == settings and torch.equal(saved["x"], x.cpu())
+                and all((out / f).exists() for f in saved.get("figures", []))):
+            print(f"[{tag}] smooth modes already done — skipping")
+            return saved["metrics"]
+    started = time.time()
+    y = corrupt(x[None], sigma, cfg["seed"] + shape_index)[0]
+    with den.graph_frozen() if freeze else contextlib.nullcontext():
+        with torch.no_grad():
+            x_hat = den(y[None])[0]
+        result = smooth_eigenpairs(
+            den, y, x_hat, sigma, k=sp["n_ev"], n_basis=settings["n_basis"],
+            n_neighbors=settings["n_neighbors"], method=jc["method"], c=jc["c"],
+            batch_jvp=jc.get("batch_jvp", 2))
+    values, vectors = result["eigvals"], result["eigvecs"]
+    figures = [f"{tag}_smooth_modes.png"]
+    plot_modes(x_hat, vectors, values, out / figures[0])
+    for i, (vector, value) in enumerate(zip(vectors, values)):
+        arrows = f"{tag}_smooth_mode{i}_arrows.png"
+        plot_mode_arrows(x_hat, vector, value, out / arrows)
+        figures.append(arrows)
+        sweep = out / f"{tag}_smooth_mode{i}_sweep.png"
+        if value > 0:
+            plot_mode_sweep(x_hat, vector, value, sweep)
+            figures.append(sweep.name)
+        elif sweep.exists():
+            sweep.unlink()  # remove an obsolete positive-variance visualization
+    metrics = {**result["diagnostics"], "eigvals": values.tolist(),
+               "seconds": time.time() - started}
+    result.update({"x": x.detach().cpu(), "y": y.detach().cpu(),
+                   "x_hat": x_hat.detach().cpu(), "settings": settings,
+                   "metrics": metrics, "figures": figures})
+    temporary = path.with_suffix(".pt.tmp")
+    torch.save(result, temporary)
+    temporary.replace(path)
+    print(f"[{tag}] smooth modes: {metrics['seconds']:.1f}s | eigenvalues {values.numpy()}")
+    return metrics
 
 
 def main() -> None:
@@ -91,7 +148,12 @@ def main() -> None:
 
         for si, (name, x) in enumerate(shapes):
             tag = f"{name}_sigma{sigma}"
+            x = x.to(device)
             if tag in metrics and (out / f"{tag}.pt").exists():
+                smooth_metrics = run_smooth(den, x, sigma, si, cfg, out, tag, freeze, args.fresh)
+                if smooth_metrics is not None:
+                    metrics[tag]["smooth"] = smooth_metrics
+                    metrics_path.write_text(json.dumps(metrics, indent=2))
                 print(f"[{tag}] already done — skipping (use --fresh to redo)")
                 continue
             t0 = time.time()
@@ -136,6 +198,12 @@ def main() -> None:
             print(f"[{tag}] {m['seconds']:.1f}s | mse {m['mse_noisy']:.2e}->"
                   f"{m['mse_denoised']:.2e} | eigvals {eigvals.cpu().numpy()} | "
                   f"overlap {history[-1].numpy()}")
+
+            # Persist the baseline before the independently resumable stage.
+            metrics_path.write_text(json.dumps(metrics, indent=2))
+            smooth_metrics = run_smooth(den, x, sigma, si, cfg, out, tag, freeze, args.fresh)
+            if smooth_metrics is not None:
+                m["smooth"] = smooth_metrics
 
             with open(out / "metrics.json", "w") as f:  # rewrite as we go
                 json.dump(metrics, f, indent=2)

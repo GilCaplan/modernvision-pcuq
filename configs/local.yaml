@@ -27,6 +27,10 @@ jacobian:
   batch_jvp: 2
 
 spectrum:
+  smooth:
+    enabled: false       # additional smooth, non-rigid uncertainty modes
+    n_basis: 30           # scalar Laplacian eigenvectors, before rigid removal
+    n_neighbors: 16       # symmetric kNN graph on the denoised cloud
   n_ev: 2
   iters: 10
   symmetrize: true
