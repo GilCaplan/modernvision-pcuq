@@ -21,6 +21,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "results"
 FIG = OUT / "figures"
+sys.path.insert(0, str(ROOT / "src"))  # for the depth-projection example only
 
 # Validated categorical palette (light mode) — see dataviz palette reference.
 BLUE, ORANGE, AQUA, GRAY = "#2a78d6", "#eb6834", "#1baf7a", "#9a9a94"
@@ -181,6 +182,47 @@ def chart_structure(phase3, masked):
     plt.close(fig)
 
 
+def render_depth_examples(resolution_lo=28, resolution_hi=256):
+    """A few ModelNet40 shapes rendered as depth-map images (scripts/run_depth2d.py's
+    side quest), at both the MNIST CNN's native input resolution (28 -- tiny and
+    blocky, what that model actually receives) and a higher scale (256, FFHQ DDPM's
+    native resolution) for comparison. Pure geometry (pcuq.depth.render_depth_map),
+    no denoiser/checkpoint needed. Skipped (returns None) if ModelNet40.zip isn't
+    already cached locally -- this script never triggers that ~2GB download itself.
+    """
+    if not (ROOT / "data/ModelNet40.zip").exists():
+        return None
+    import torch
+    from pcuq.data import load_modelnet
+    from pcuq.depth import render_depth_map
+
+    cfg = {"data": {"root": str(ROOT / "data"), "n_shapes": 3, "n_points": 2048,
+                    "categories": ["chair", "table", "guitar"]}, "seed": 0}
+    shapes = load_modelnet(cfg, torch.float32)
+
+    fig, axes = plt.subplots(len(shapes), 2, figsize=(4.4, 2.2 * len(shapes)))
+    for row, (name, pts) in enumerate(shapes):
+        for col, res in enumerate((resolution_lo, resolution_hi)):
+            img = render_depth_map(pts, res, axis=2, dilate=1).numpy()
+            ax = axes[row, col]
+            ax.imshow(img, cmap="gray", vmin=0, vmax=1, interpolation="nearest")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if row == 0:
+                label = f"{res}x{res}" + (" (MNIST CNN input)" if res == resolution_lo
+                                          else " (FFHQ DDPM scale)")
+                ax.set_title(label, fontsize=8, color=INK)
+            if col == 0:
+                ax.set_ylabel(name, fontsize=8, color=INK)
+    fig.suptitle("Depth-map projection of a 3D point cloud (axis=2, dilate=1) --\n"
+                "the image actually fed to the reference paper's own 2D denoisers",
+                fontsize=9, color=INK)
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    fig.savefig(FIG / "depth_projection_examples.png", dpi=170)
+    plt.close(fig)
+    return [name for name, _ in shapes]
+
+
 def pick_exemplars(masked, masked_src, n=6):
     """Best converged, high-spread, PSD, TRUSTWORTHY region runs — one per
     (category, sigma). `trustworthy` (task 9, pcuq.diagnostics.is_trustworthy) is
@@ -248,6 +290,7 @@ def main() -> None:
     exemplars = pick_exemplars(masked, (ROOT / masked_path).parent) if masked else []
     if masked:
         chart_structure(phase3, masked)
+    depth_example_shapes = render_depth_examples()
 
     lines = [
         "# Results",
@@ -377,10 +420,43 @@ def main() -> None:
         marker = "\n### "  # first exemplar heading -- the section-4 intro
                           # paragraph above is already in `lines`, don't duplicate it
         if "## 4. The modes themselves" in old and marker in old:
-            lines += old[old.index(marker) + 1:].rstrip("\n").split("\n")
-            n_exemplars = old.count(marker)
+            start = old.index(marker) + 1
+            # Stop before the next level-2 heading (e.g. a "## 5." added later) so
+            # that later sections aren't swallowed into this preserved blob and
+            # then duplicated when they're independently regenerated below.
+            next_h2 = old.find("\n## ", start)
+            chunk = old[start:next_h2] if next_h2 != -1 else old[start:]
+            lines += chunk.rstrip("\n").split("\n")
+            n_exemplars = chunk.count(marker)
         else:
             n_exemplars = 0
+
+    if depth_example_shapes:
+        lines += [
+            "## 5. Side quest: shapes as depth-map images",
+            "",
+            "`scripts/run_depth2d.py` (docs/LOG.md 2026-09-11/16) renders each "
+            "ModelNet40 shape into a single-view depth-map image and runs it "
+            "through the reference paper's OWN 2D denoiser (MNIST CNN or FFHQ "
+            "DDPM) instead of Noise2Score3D — a cross-domain comparison: what "
+            "happens to the reference method's own uncertainty estimate when "
+            "fed a photo of a 3D shape instead of a digit or a face? "
+            f"({', '.join(depth_example_shapes)} shown here, at the resolution "
+            "each denoiser actually receives):",
+            "",
+            "![depth projections](figures/depth_projection_examples.png)",
+            "",
+            "The 28x28 MNIST-scale image is genuinely this blocky — a full "
+            "point cloud compressed to fewer pixels than it has dimensions of "
+            "variation. Finding: roughly half of shapes at this scale produce a "
+            "non-PSD implied covariance (negative eigenvalues) under the frozen "
+            "MNIST CNN, via a *low-antisymmetry* mechanism distinct from the "
+            "3D noise-range breakdown above — and a sharper failure mode "
+            "(pipeline fix, 2026-09-16): ~30% of shapes are rejected outright "
+            "as too asymmetric to call a covariance at all, which the original "
+            "eigensolver couldn't detect. See docs/LOG.md for the full numbers.",
+        ]
+
     (OUT / "README.md").write_text("\n".join(lines), encoding="utf-8")
     print(f"results/ built: {len(list(FIG.glob('*.png')))} figures, "
           f"README with {n_exemplars} exemplars"
