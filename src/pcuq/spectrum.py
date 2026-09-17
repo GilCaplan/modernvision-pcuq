@@ -66,3 +66,92 @@ def top_eigenpairs(denoiser: Denoiser, y: torch.Tensor, sigma: float, k: int,
     eigvals = sigma**2 * (V.reshape(k, -1) * W.reshape(k, -1)).sum(dim=1)
     eigvals, order = eigvals.sort(descending=True, stable=True)
     return V[order], eigvals, history
+
+
+def smooth_eigenpairs(denoiser: Denoiser, y: torch.Tensor, x_hat: torch.Tensor,
+                      sigma: float, k: int, n_basis: int = 30,
+                      n_neighbors: int = 16, method: str = "central",
+                      c: float = 1e-3, batch_jvp: int = 2) -> dict:
+    """Covariance restricted to smooth, non-rigid displacement fields.
+
+    The caller must freeze the denoiser graph at y before calling this function.
+    Geometry is built once on x_hat. B is the orthonormal intersection of the
+    low-frequency Laplacian space with the complement of rigid motion. Returned
+    tensors are on CPU; basis has shape (3N, d), eigvecs has shape (k, N, 3).
+    Smoothness is a restriction, not evidence of structural ambiguity. Residuals
+    refer to the reduced symmetric operator, not the full denoiser Jacobian.
+    """
+    if y.ndim != 2 or y.shape[1] != 3 or x_hat.shape != y.shape:
+        raise ValueError("y and x_hat must have shape (N, 3)")
+    if not torch.isfinite(y).all() or not torch.isfinite(x_hat).all():
+        raise ValueError("point clouds must be finite")
+    n = len(y)
+    if not 1 <= n_neighbors < n or not 1 <= n_basis <= n:
+        raise ValueError("require 1 <= n_neighbors < N and 1 <= n_basis <= N")
+    if k < 1 or batch_jvp < 1 or not 0 < c < float("inf") or not 0 <= sigma < float("inf"):
+        raise ValueError("require positive k, batch_jvp, c and finite nonnegative sigma")
+    if method not in ("forward", "central", "autograd"):
+        raise ValueError("smooth modes require a JVP method: forward, central, autograd")
+
+    points = x_hat.detach().cpu().double()
+    distances = torch.cdist(points, points)
+    distances.fill_diagonal_(float("inf"))
+    neighbors = distances.argsort(dim=1, stable=True)[:, :n_neighbors]
+    adjacency = torch.zeros(n, n, dtype=torch.float64)
+    adjacency.scatter_(1, neighbors, 1)
+    adjacency = torch.maximum(adjacency, adjacency.T)
+    laplacian = adjacency.sum(1).diag() - adjacency
+    frequencies, phi = torch.linalg.eigh(laplacian)
+    edges = torch.nonzero(torch.triu(adjacency, diagonal=1), as_tuple=False).T
+    raw_basis = torch.kron(phi[:, :n_basis].contiguous(), torch.eye(3, dtype=torch.float64))
+
+    # Normalize the independent rigid fields before computing their overlap so
+    # the nullspace tolerance is independent of object size (including flat or
+    # collinear clouds, whose rigid-field rank can be less than six).
+    centered = points - points.mean(0)
+    axes = torch.eye(3, dtype=torch.float64)
+    rigid = torch.stack([axis.expand_as(points) for axis in axes] +
+                        [torch.linalg.cross(axis.expand_as(points), centered)
+                         for axis in axes], dim=-1).reshape(3 * n, 6)
+    u, s, _ = torch.linalg.svd(rigid, full_matrices=False)
+    rank = int((s > s.max() * max(rigid.shape) * torch.finfo(s.dtype).eps).sum())
+    overlap = u[:, :rank].T @ raw_basis
+    _, singular, vh = torch.linalg.svd(overlap, full_matrices=True)
+    tol = max(overlap.shape) * torch.finfo(overlap.dtype).eps
+    removed = int((singular > tol).sum())
+    basis = raw_basis @ vh[removed:].T
+    if basis.shape[1] < k:
+        raise ValueError(f"only {basis.shape[1]} non-rigid basis directions remain; "
+                         "increase n_basis or reduce k")
+    basis, _ = torch.linalg.qr(basis)
+
+    columns = []
+    for start in range(0, basis.shape[1], batch_jvp):
+        directions = basis[:, start:start + batch_jvp].T.reshape(-1, n, 3).to(y)
+        products = jvp(denoiser, y, directions, method=method, c=c)
+        columns.append(basis.T @ products.detach().cpu().double().reshape(-1, 3 * n).T)
+    covariance = sigma**2 * torch.cat(columns, dim=1)
+    if not torch.isfinite(covariance).all():
+        raise ValueError("nonfinite projected Jacobian products")
+    symmetric = (covariance + covariance.T) / 2
+    all_values, coefficients = torch.linalg.eigh(symmetric)
+    values = all_values.flip(0)[:k]
+    coefficients = coefficients.flip(1)[:, :k]
+    vectors = (basis @ coefficients).T.reshape(k, n, 3)
+    residual = (symmetric @ coefficients - coefficients * values).norm(dim=0)
+    scale = symmetric.norm().clamp_min(torch.finfo(symmetric.dtype).tiny)
+    roughness = torch.einsum("kic,ij,kjc->k", vectors, laplacian, vectors)
+    diagnostics = {
+        "basis_dimension": basis.shape[1], "rigid_rank": rank,
+        "removed_dimensions": removed,
+        "graph_components": int((frequencies.abs() < 1e-10).sum()),
+        "asymmetry_relative": float((covariance - covariance.T).norm() /
+                                    covariance.norm().clamp_min(torch.finfo(covariance.dtype).tiny)),
+        "projected_residuals": (residual / scale).tolist(),
+        "roughness": roughness.tolist(),
+        "negative_eigenvalues": int((all_values < -1e-10 * scale).sum()),
+        "minimum_eigenvalue": float(all_values.min()),
+    }
+    return {"eigvecs": vectors, "eigvals": values, "basis": basis,
+            "reduced_covariance": covariance, "laplacian_eigenvalues": frequencies[:n_basis],
+            "graph_edges": edges, "diagnostics": diagnostics}
