@@ -1,0 +1,54 @@
+{
+ "source": "results/README.md table 1; docs/LOG.md 2026-08-17 Phase-3 entry and 2026-08-18 comprehensive-evidence entry",
+ "raw_artifacts": "outputs/phase3/run_experiment/ \u2014 LOST (outputs/ is empty)",
+ "design": "50 shapes x 5 categories per sigma, 5 eigenpairs each (250 eigenvalues per sigma), 15 iters, frozen graph",
+ "training_sigma_range": [
+  0.004,
+  0.034
+ ],
+ "rows": [
+  {
+   "sigma": 0.01,
+   "median_lam0_over_sigma2": 1.06,
+   "n_negative_eigvals": 0,
+   "median_convergence": 0.999,
+   "antisym_energy": 0.001,
+   "lam0_over_sigma2_range": [
+    0.81,
+    1.59
+   ]
+  },
+  {
+   "sigma": 0.02,
+   "median_lam0_over_sigma2": 1.39,
+   "n_negative_eigvals": 2,
+   "median_convergence": 0.996,
+   "antisym_energy": 0.009,
+   "lam0_over_sigma2_range": [
+    1.12,
+    2.33
+   ]
+  },
+  {
+   "sigma": 0.03,
+   "median_lam0_over_sigma2": 1.91,
+   "n_negative_eigvals": 19,
+   "median_convergence": 0.934,
+   "antisym_energy": null,
+   "lam0_over_sigma2_range": null
+  },
+  {
+   "sigma": 0.05,
+   "median_lam0_over_sigma2": 0.72,
+   "n_negative_eigvals": 191,
+   "median_convergence": 0.408,
+   "antisym_energy": null,
+   "lam0_over_sigma2_range": [
+    -7,
+    7
+   ],
+   "beyond_training_range": true
+  }
+ ],
+ "lost": "per-shape values and per-shape local density \u2014 this blocks R6 at sweep scale; region-scale density is in derived/region_runs.json"
+}

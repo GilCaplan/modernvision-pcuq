@@ -12,7 +12,12 @@ from .jacobian import jvp, vjp
 def _unit_probes(y: torch.Tensor, n: int, seed: int) -> torch.Tensor:
     gen = torch.Generator(device="cpu").manual_seed(seed)
     v = torch.randn(n, *y.shape, generator=gen, dtype=y.dtype).to(y.device)
-    return v / v.reshape(n, -1).norm(dim=1).reshape(n, 1, 1)
+    # norm's reshape must match y's rank (2 for point clouds (N,3), 3 for images
+    # (C,H,W), ...) -- a hardcoded (n,1,1) silently mis-broadcasts for anything
+    # that isn't exactly rank 2 (caught when this was first exercised on (C,H,W)
+    # depth-map images, see docs/LOG.md 2026-09-16).
+    norm = v.reshape(n, -1).norm(dim=1).reshape(n, *([1] * y.dim()))
+    return v / norm
 
 
 def check_equivariance(denoiser: Denoiser, y: torch.Tensor, seed: int = 0) -> float:
@@ -98,3 +103,28 @@ def psd_report(eigvals: torch.Tensor) -> dict:
         "negative_mass_ratio": float(neg.abs().sum() / eigvals.abs().sum().clamp(min=1e-30)),
         "eigvals_psd_projected": [float(v) for v in eigvals.clamp(min=0)],
     }
+
+
+def is_trustworthy(m: dict, min_convergence: float = 0.9,
+                   max_ritz_residual: float = 0.15) -> bool:
+    """Composite "trustworthy mode" flag over a run's saved metrics dict (task 9,
+    docs/LOG.md 2026-09-16): not rejected by top_eigenpairs' symmetry gate, the
+    subspace actually converged, and the finalized Ritz eigenpairs are
+    self-consistent. Cheap aggregation over diagnostics already computed by
+    top_eigenpairs(..., return_diagnostics=True) -- not a new check, and not a
+    substitute for the two still-open task-9 criteria (stability under a second
+    noise seed / point resampling), which need new runs, not just this.
+
+    Default thresholds (0.9 convergence, 0.15 max Ritz residual) were picked from
+    the observed distribution over the 2026-09-16 n=50 real-model sweep: the bulk
+    of accepted runs cluster well inside both, with a clear gap before the
+    poorly-converged/high-residual tail (mostly sigma=0.05, beyond the training
+    range) -- not arbitrary round numbers.
+    """
+    if "top_eigenpairs_rejected" in m:
+        return False
+    if min(m["final_iter_overlap"]) < min_convergence:
+        return False
+    if max(m["ritz_relative_residuals"]) > max_ritz_residual:
+        return False
+    return True

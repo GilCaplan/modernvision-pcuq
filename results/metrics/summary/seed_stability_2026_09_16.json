@@ -1,0 +1,23 @@
+{
+ "source": "docs/LOG.md 2026-09-16 'Task 9 second half' entry",
+ "raw_artifacts": "results/metrics/raw/gpu__audit_seed_stability.json \u2014 PRESENT",
+ "design": "15 shapes trustworthy @ sigma=0.02 in the n=50 run above; re-noised with a new seed (same points) and separately resampled (same mesh, different points, same seed formula).",
+ "finding": "eigenVALUE magnitude is stable under both perturbations; eigenVECTOR direction for whole-shape spectra is NOT stable under a new noise seed -- see seed_stability.median_max_subspace_angle_degrees below (89.4 = essentially orthogonal). Mechanism: near-degenerate top-5 eigenvalues (median spread 16.6%) leave the eigenbasis numerically ill-defined, so small perturbations rotate it freely. Point resampling is much gentler than reseeding (median eigenvalue shift ~8% vs. eigenvectors going to ~90 degrees apart under reseeding).",
+ "seed_stability": {
+  "n": 15,
+  "n_rejected_under_new_seed": 3,
+  "still_trustworthy": 12,
+  "median_top_mode_overlap": 0.041,
+  "median_top_eigval_ratio": 0.952,
+  "median_max_subspace_angle_degrees": 89.36,
+  "median_ref_eigval_spread": 0.166
+ },
+ "resample_stability": {
+  "n": 15,
+  "n_rejected_under_resampling": 1,
+  "still_trustworthy": 14,
+  "median_eigval0_over_sigma2_original": 1.457,
+  "median_eigval0_over_sigma2_resampled": 1.337
+ },
+ "caveat": "n=15, one sigma (0.02) only, whole-shape spectra only. Whether region-restricted (masked) modes are more directionally stable -- predicted by this mechanism, since regions have less degenerate spectra per Phase 3.5 -- is untested (needs a full-scale masked-modes run first, see PLAN.md)."
+}

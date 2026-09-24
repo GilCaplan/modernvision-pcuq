@@ -1,0 +1,7 @@
+{
+ "source": "docs/PLAN.md, docs/LOG.md",
+ "permutation_equivariance_rel_err": 2e-08,
+ "phase1_eigval_rel_err_max": 0.003,
+ "phase1_eigvec_abs_cos_min": 0.995,
+ "step_size_plateau_c": 0.001
+}

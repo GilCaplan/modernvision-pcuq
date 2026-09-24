@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import contextlib
 import json
 import sys
 import time
@@ -63,7 +64,8 @@ def main() -> None:
     print(f"equivariance (relative error under permutation): {equiv:.2e}")
 
     metrics = {"forward_seconds": fwd_s, "mse_noisy": mse_noisy,
-               "mse_denoised": mse_denoised, "equivariance_rel_err": equiv}
+               "mse_denoised": mse_denoised, "equivariance_rel_err": equiv,
+               "checkpoint_sha256": den.checkpoint_sha256}
 
     jc, sp = cfg["jacobian"], cfg["spectrum"]
     try:
@@ -77,13 +79,31 @@ def main() -> None:
         metrics["autograd_error"] = repr(e)
         print(f"autograd through the model FAILED ({e!r}) — finite differences only.")
 
+    # Their forward rebuilds the voxel/radius graph every call; without freezing it,
+    # finite differences pick up O(1) jumps at graph boundaries instead of the local
+    # derivative and top_eigenpairs correctly refuses the result (see docs/LOG.md
+    # 2026-09-16 graph-freezing audit) -- this Phase-2 gate needs the same freezing
+    # the real experiment scripts use, not a bare finite difference.
+    freeze = cfg["denoiser"]["freeze_graph"]
+    freeze_variant = cfg["denoiser"].get("graph_freeze_variant", "full")
+    if not freeze:
+        graph_ctx = contextlib.nullcontext()
+    elif freeze_variant == "topology":
+        graph_ctx = den.graph_topology_frozen()
+    else:
+        graph_ctx = den.graph_frozen()
+
     t0 = time.time()
-    eigvecs, eigvals, history = top_eigenpairs(
-        den, y[0], sigma, k=sp["n_ev"], iters=sp["iters"],
-        method=jc["method"], c=jc["c"], symmetrize=False)
+    with graph_ctx:
+        with torch.no_grad():
+            den(y)  # anchor forward (fills the graph cache)
+        eigvecs, eigvals, history = top_eigenpairs(
+            den, y[0], sigma, k=sp["n_ev"], iters=sp["iters"],
+            method=jc["method"], c=jc["c"], symmetrize=False)
     metrics["spectrum_seconds"] = time.time() - t0
     metrics["eigvals"] = eigvals.cpu().tolist()
     metrics["final_iter_overlap"] = history[-1].tolist()
+    metrics["covariance_kind"] = den.covariance_kind
     print(f"spectrum ({sp['n_ev']} ev, {sp['iters']} iters): "
           f"{metrics['spectrum_seconds']:.1f}s | eigvals {eigvals.cpu().numpy()} | "
           f"final overlap {history[-1].numpy()}")

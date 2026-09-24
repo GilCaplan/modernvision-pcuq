@@ -1,0 +1,173 @@
+{
+  "chair_0890__regular": {
+    "step_size_self_consistency": {
+      "0.01": 0.4944477379322052,
+      "0.001": 0.6295889616012573,
+      "0.0001": 0.5002719163894653,
+      "1e-05": 0.05101572722196579
+    },
+    "antisym_energy_probe": 0.0029422177467495203
+  },
+  "chair_0890__graph_frozen": {
+    "step_size_self_consistency": {
+      "0.01": 0.019280733540654182,
+      "0.001": 0.0066706654615700245,
+      "0.0001": 0.0054206158965826035,
+      "1e-05": 0.054400064051151276
+    },
+    "antisym_energy_probe": 0.012064066715538502,
+    "top_eigenpairs_rejected": "projected operator is not symmetric enough for covariance eigenpairs (relative asymmetry 0.0729 > 0.05); use a symmetrized JVP/VJP operator or report sensitivity modes instead"
+  },
+  "chair_0890__graph_topology_frozen": {
+    "step_size_self_consistency": {
+      "0.01": 0.017627576366066933,
+      "0.001": 0.0063892267644405365,
+      "0.0001": 0.005276916548609734,
+      "1e-05": 0.050833702087402344
+    },
+    "antisym_energy_probe": 0.009321418590843678,
+    "eigvals": [
+      0.0007993791368789971,
+      0.0007477858453057706
+    ],
+    "eigval_over_sigma_sq": [
+      1.9984478950500488,
+      1.869464635848999
+    ],
+    "final_iter_overlap": [
+      0.9984491467475891,
+      0.9985696077346802
+    ],
+    "final_subspace_max_angle_degrees": 3.140617847442627,
+    "ritz_relative_residuals": [
+      0.034741129726171494,
+      0.04324939474463463
+    ]
+  },
+  "chair_0891__regular": {
+    "step_size_self_consistency": {
+      "0.01": 0.7841238379478455,
+      "0.001": 0.8068943619728088,
+      "0.0001": 0.01072527002543211,
+      "1e-05": 0.066683329641819
+    },
+    "antisym_energy_probe": 0.01794498972594738
+  },
+  "chair_0891__graph_frozen": {
+    "step_size_self_consistency": {
+      "0.01": 0.029821133241057396,
+      "0.001": 0.011033421382308006,
+      "0.0001": 0.010458119213581085,
+      "1e-05": 0.06367021799087524
+    },
+    "antisym_energy_probe": 0.00463217543438077,
+    "eigvals": [
+      0.0008568665361963212,
+      -0.0009735175408422947
+    ],
+    "eigval_over_sigma_sq": [
+      2.1421663761138916,
+      -2.4337940216064453
+    ],
+    "final_iter_overlap": [
+      0.9476409554481506,
+      0.9778620600700378
+    ],
+    "final_subspace_max_angle_degrees": 15.269973754882812,
+    "ritz_relative_residuals": [
+      0.08009516447782516,
+      0.2104310691356659
+    ]
+  },
+  "chair_0891__graph_topology_frozen": {
+    "step_size_self_consistency": {
+      "0.01": 0.028980663046240807,
+      "0.001": 0.01184063870459795,
+      "0.0001": 0.01084720529615879,
+      "1e-05": 0.06352845579385757
+    },
+    "antisym_energy_probe": 0.00674461992457509,
+    "eigvals": [
+      0.00018006766913458705,
+      -0.000994838890619576
+    ],
+    "eigval_over_sigma_sq": [
+      0.450169175863266,
+      -2.4870972633361816
+    ],
+    "final_iter_overlap": [
+      0.9947831630706787,
+      0.24128088355064392
+    ],
+    "final_subspace_max_angle_degrees": 76.02838897705078,
+    "ritz_relative_residuals": [
+      0.9698430299758911,
+      0.07035477459430695
+    ]
+  },
+  "chair_0892__regular": {
+    "step_size_self_consistency": {
+      "0.01": 0.7786688208580017,
+      "0.001": 5.39971399307251,
+      "0.0001": 0.010783324018120766,
+      "1e-05": 0.05913105979561806
+    },
+    "antisym_energy_probe": 0.05848328396677971
+  },
+  "chair_0892__graph_frozen": {
+    "step_size_self_consistency": {
+      "0.01": 0.029439721256494522,
+      "0.001": 0.014038520865142345,
+      "0.0001": 0.011010211892426014,
+      "1e-05": 0.06571348756551743
+    },
+    "antisym_energy_probe": 0.010427171364426613,
+    "top_eigenpairs_rejected": "projected operator is not symmetric enough for covariance eigenpairs (relative asymmetry 0.0889 > 0.05); use a symmetrized JVP/VJP operator or report sensitivity modes instead"
+  },
+  "chair_0892__graph_topology_frozen": {
+    "step_size_self_consistency": {
+      "0.01": 0.02554614283144474,
+      "0.001": 0.013776367530226707,
+      "0.0001": 0.010675318539142609,
+      "1e-05": 0.05863150209188461
+    },
+    "antisym_energy_probe": 0.0017503963317722082,
+    "eigvals": [
+      0.0006377294193953276,
+      0.0005044905701652169
+    ],
+    "eigval_over_sigma_sq": [
+      1.5943236351013184,
+      1.2612264156341553
+    ],
+    "final_iter_overlap": [
+      0.9284079074859619,
+      0.7224860787391663
+    ],
+    "final_subspace_max_angle_degrees": 46.815696716308594,
+    "ritz_relative_residuals": [
+      0.3343741297721863,
+      0.6725606918334961
+    ]
+  },
+  "summary": {
+    "regular": {
+      "antisym_energy_probe": 0.01794498972594738,
+      "step_size_self_consistency_at_c": 0.8068943619728088
+    },
+    "graph_frozen": {
+      "antisym_energy_probe": 0.010427171364426613,
+      "step_size_self_consistency_at_c": 0.011033421382308006,
+      "n_rejected": 2,
+      "eigval0_over_sigma_sq": 2.1421663761138916,
+      "final_iter_overlap_min": 0.9476409554481506
+    },
+    "graph_topology_frozen": {
+      "antisym_energy_probe": 0.00674461992457509,
+      "step_size_self_consistency_at_c": 0.01184063870459795,
+      "n_rejected": 0,
+      "eigval0_over_sigma_sq": 1.5943236351013184,
+      "final_iter_overlap_min": 0.7224860787391663
+    }
+  }
+}

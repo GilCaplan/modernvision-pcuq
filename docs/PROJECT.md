@@ -26,6 +26,17 @@ is σ² times the Jacobian of the posterior mean**:
 Cov[X|Y=y] = σ² · ∂μ₁(y)/∂y        where μ₁(y) = E[X|Y=y] ≈ D(y)  (the frozen denoiser)
 ```
 
+This identity is exact when `D` is *verifiably* the MMSE denoiser at exactly the queried
+σ. It holds by construction for `AnalyticGaussianDenoiser`/`AnalyticGMMDenoiser` (the
+toy priors). For Noise2Score3D it does not: the network is an unconditioned score
+estimate with σ manually substituted into Tweedie's formula, with no per-σ check that it
+equals the true fixed-σ posterior mean there. Every denoiser now declares which case it
+is via `covariance_kind` (`src/pcuq/denoisers.py`) — Noise2Score3D is
+`frozen_pyramid_sensitivity`, meaning σ²·J is treated as a local sensitivity operator we
+report, not a proven posterior covariance. See `results/README.md` §1 and
+`docs/LOG.md` (2026-09-16 entries) for what this changes about how the σ-sweep should be
+read.
+
 So the top eigenvectors of `Cov[X|Y=y]` — the dominant uncertainty directions — can be
 found by **power iteration on the denoiser's Jacobian**, where each Jacobian-vector
 product is a single extra forward pass via finite differences:

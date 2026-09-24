@@ -16,7 +16,7 @@ from pathlib import Path
 
 import torch
 
-from .denoisers import Denoiser
+from .denoisers import APPROXIMATE_MMSE_FIXED_SIGMA, Denoiser
 
 
 def _add_paths(repo_dir: str, *subdirs: str) -> Path:
@@ -35,6 +35,8 @@ class MNISTDenoiser2D(Denoiser):
     """
 
     SIGMA = 140.25 / 255
+    covariance_kind = APPROXIMATE_MMSE_FIXED_SIGMA  # the reference paper's own
+    # network, trained as a regression denoiser at exactly this fixed sigma.
 
     def __init__(self, repo_dir: str, device: torch.device):
         repo = _add_paths(repo_dir, "MNIST")
@@ -54,6 +56,9 @@ class FFHQDenoiser2D(Denoiser):
     timestep `from_t`; sigma is implied by the timestep). Needs ffhq.pt (2.2GB,
     see external/README.md). Images (B, 3, 256, 256) in [-1, 1].
     """
+
+    covariance_kind = APPROXIMATE_MMSE_FIXED_SIGMA  # one reverse DDPM step at a
+    # fixed timestep -> a fixed, known sigma; same status as MNISTDenoiser2D above.
 
     def __init__(self, repo_dir: str, device: torch.device, from_t: int = 100):
         _add_paths(repo_dir, "DDPM_FFHQ")
