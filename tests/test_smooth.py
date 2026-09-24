@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 import torch
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -93,10 +94,10 @@ def test_saved_pipeline_and_independent_resume(tmp_path, monkeypatch):
     cfg["data"].update(n_points=16, n_shapes=1)
     cfg["spectrum"].update(n_ev=2, iters=3)
     cfg["spectrum"]["smooth"].update(n_basis=8, n_neighbors=3)
-    config = tmp_path / "config.json"
+    config = tmp_path / "config.yaml"
 
     def run():
-        config.write_text(json.dumps(cfg))
+        config.write_text(yaml.safe_dump(cfg))  # YAML reads JSON "1e-05" as a string
         monkeypatch.setattr(sys, "argv", ["run_experiment", "--config", str(config)])
         runner.main()
 

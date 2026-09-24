@@ -172,7 +172,9 @@ def smooth_eigenpairs(denoiser: Denoiser, y: torch.Tensor, x_hat: torch.Tensor,
     laplacian = adjacency.sum(1).diag() - adjacency
     frequencies, phi = torch.linalg.eigh(laplacian)
     edges = torch.nonzero(torch.triu(adjacency, diagonal=1), as_tuple=False).T
-    raw_basis = torch.kron(phi[:, :n_basis].contiguous(), torch.eye(3, dtype=torch.float64))
+    # kron(phi_k, I3) written out: torch.kron fails on single-column slices.
+    raw_basis = torch.einsum("ij,cd->icjd", phi[:, :n_basis],
+                             torch.eye(3, dtype=torch.float64)).reshape(3 * n, 3 * n_basis)
 
     # Normalize the independent rigid fields before computing their overlap so
     # the nullspace tolerance is independent of object size (including flat or
