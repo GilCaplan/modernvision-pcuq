@@ -68,10 +68,48 @@ Best converged, PSD region runs (spread = top-to-last eigenvalue gap). Per exemp
 ![guitar_0156_sigma0.02_r0 arrows](figures/guitar_0156_sigma0.02_r0_mode0_arrows.png)
 ![guitar_0156_sigma0.02_r0 sweep](figures/guitar_0156_sigma0.02_r0_mode0_sweep.png)
 
-## 5. Side quest: shapes as depth-map images
+## 5. Smooth deformation modes: rigid motion removed
+
+`spectrum.smooth_eigenpairs` (docs/SMOOTH_MODES.md) restricts σ²·J to smooth displacement fields: the lowest graph-Laplacian frequencies on x̂, with global translations and infinitesimal rotations projected out (~84 directions). The reduced matrix is solved exactly and passes the same symmetry gate as the whole-shape spectrum. Same 50 shapes and noise draws as §1, whole-shape baseline recomputed alongside:
+
+![smooth vs whole](figures/smooth_vs_whole.png)
+
+| σ | smooth λ₀/σ² | smooth top-5 spread | whole-shape λ₀/σ² | whole-shape top-5 spread* | smooth rejected | runs with a negative smooth eigenvalue |
+|---|---|---|---|---|---|---|
+| 0.01 | 1.011 | 0.5% | 1.07 | 2.8% | 4/50 | 0/46 |
+| 0.02 | 1.031 | 1.2% | 1.42 | 12.5% | 12/50 | 0/38 |
+| 0.05 ⚠ | — | — | -0.89 | — | 50/50 | 0/0 |
+
+*Spreads use only runs whose top-5 eigenvalues are all positive. The whole-shape columns come from this re-run, not §1: in range they match §1 closely; at σ=0.05 they differ (§1: −0.53σ², 13/50 rejected), that regime being ill-conditioned enough for machine-level floating-point differences to show.
+
+**Along smooth deformations the denoiser behaves almost like the identity.** In range, the smooth eigenvalues sit at σ² (λ₀ ≈ 1.01–1.03σ², and even the smallest of the ~84 smooth-subspace eigenvalues is ~0.76–0.90σ²), with a top-5 spread of about 1%, flatter than the whole-shape spectrum. Noise2Score3D does not shrink smooth, non-rigid displacements, so its uncertainty over them is the full noise level and nearly the same for every smooth deformation: no single bend or stretch stands out. Rejections are not the same shapes as the whole-shape gate's: some shapes the baseline rejects pass on the smooth subspace and vice versa. At σ=0.05 every smooth run is rejected (median asymmetry 0.13), consistent with the out-of-range breakdown in §1.
+
+**Direction stability (new noise seed, same points, 15 trustworthy σ=0.02 shapes, `scripts/audit_smooth_seed_stability.py`):** top eigenvalue ratio 1.000; top-mode overlap 0.33; principal angles between the two top-5 subspaces span 26°–85° (medians), against 67°–88° for two random 5-dimensional subspaces of the same smooth basis. Eigenvalues reproduce exactly. Individual smooth modes do not (top-mode overlap ranges from 0.04 to 0.89 across shapes), but about three directions of the top-5 subspace do: 2–4 principal angles per shape fall below the chance minimum. That is better than the whole-shape modes (§3: top-mode overlap 0.04, max angle 89°), yet still not a per-mode property: read the figures below as one noisy observation.
+
+Example smooth modes at σ=0.02 (mode magnitudes, mode-0 arrows, mode-0 sweep x̂ ± t·√λ·v), each for one noisy observation:
+
+### chair_0891_sigma0.02 (smooth)
+
+![chair_0891_sigma0.02 smooth modes](figures/chair_0891_sigma0.02_smooth_modes.png)
+![chair_0891_sigma0.02 smooth arrows](figures/chair_0891_sigma0.02_smooth_mode0_arrows.png)
+![chair_0891_sigma0.02 smooth sweep](figures/chair_0891_sigma0.02_smooth_mode0_sweep.png)
+
+### lamp_0131_sigma0.02 (smooth)
+
+![lamp_0131_sigma0.02 smooth modes](figures/lamp_0131_sigma0.02_smooth_modes.png)
+![lamp_0131_sigma0.02 smooth arrows](figures/lamp_0131_sigma0.02_smooth_mode0_arrows.png)
+![lamp_0131_sigma0.02 smooth sweep](figures/lamp_0131_sigma0.02_smooth_mode0_sweep.png)
+
+### table_0400_sigma0.02 (smooth)
+
+![table_0400_sigma0.02 smooth modes](figures/table_0400_sigma0.02_smooth_modes.png)
+![table_0400_sigma0.02 smooth arrows](figures/table_0400_sigma0.02_smooth_mode0_arrows.png)
+![table_0400_sigma0.02 smooth sweep](figures/table_0400_sigma0.02_smooth_mode0_sweep.png)
+
+## 6. Side quest: shapes as depth-map images
 
 `scripts/run_depth2d.py` (docs/LOG.md 2026-09-11/16) renders each ModelNet40 shape into a single-view depth-map image and runs it through the reference paper's OWN 2D denoiser (MNIST CNN or FFHQ DDPM) instead of Noise2Score3D — a cross-domain comparison: what happens to the reference method's own uncertainty estimate when fed a photo of a 3D shape instead of a digit or a face? (chair_0890, table_0393, guitar_0156 shown here, at the resolution each denoiser actually receives):
 
 ![depth projections](figures/depth_projection_examples.png)
 
-The 28x28 MNIST-scale image is genuinely this blocky — a full point cloud compressed to fewer pixels than it has dimensions of variation. Finding: roughly half of shapes at this scale produce a non-PSD implied covariance (negative eigenvalues) under the frozen MNIST CNN, via a *low-antisymmetry* mechanism distinct from the 3D noise-range breakdown above — and a sharper failure mode (pipeline fix, 2026-09-16): ~30% of shapes are rejected outright as too asymmetric to call a covariance at all, which the original eigensolver couldn't detect. See docs/LOG.md for the full numbers.
+The 28x28 MNIST-scale image is genuinely this blocky — a full point cloud compressed to fewer pixels than it has dimensions of variation. Finding (50 shapes, MNIST CNN, re-tallied under the fixed pipeline 2026-09-24): two failure tiers. **11/50 (22%) are rejected outright** — the operator on the top subspace is too asymmetric to call a covariance, which the original eigensolver couldn't detect. **21/50 (42%) are accepted but non-PSD** (negative eigenvalues with near-zero asymmetry on the top subspace), a mechanism distinct from the 3D noise-range breakdown above. Only 18/50 (36%) give a PSD spectrum. The old ~50% non-PSD figure mixed the first two tiers. See docs/LOG.md 2026-09-24.

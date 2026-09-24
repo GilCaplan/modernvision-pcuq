@@ -13,17 +13,31 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from pcuq.data import make_toy_gaussian
-from pcuq.denoisers import AnalyticGaussianDenoiser, Denoiser
+from pcuq.denoisers import (FROZEN_PYRAMID_SENSITIVITY, AnalyticGaussianDenoiser,
+                             Denoiser)
 from pcuq.spectrum import smooth_eigenpairs
 from pcuq.utils import load_config
 
 
 class Scale(Denoiser):
+    covariance_kind = FROZEN_PYRAMID_SENSITIVITY
+
     def __init__(self, scale):
         self.scale = scale
 
     def denoise(self, y):
         return self.scale * y
+
+
+class Linear(Denoiser):
+    """D(y) = A y on the flattened cloud — asymmetric whenever A is."""
+    covariance_kind = FROZEN_PYRAMID_SENSITIVITY
+
+    def __init__(self, A):
+        self.A = A
+
+    def denoise(self, y):
+        return (y.reshape(len(y), -1) @ self.A.T).reshape(y.shape)
 
 
 def cloud(n=16):
@@ -120,3 +134,18 @@ def test_saved_pipeline_and_independent_resume(tmp_path, monkeypatch):
     run()
     assert torch.load(path, weights_only=True)["settings"]["n_basis"] == 7
     assert baseline.stat().st_mtime_ns == baseline_time
+
+
+def test_asymmetric_operator_rejected_and_unlabeled_denoiser_refused():
+    y = cloud()
+    g = torch.Generator().manual_seed(3)
+    skew = torch.randn(48, 48, dtype=torch.float64, generator=g)
+    with pytest.raises(ValueError, match="not symmetric enough"):
+        solve(Linear(torch.eye(48, dtype=torch.float64) + (skew - skew.T)), y)
+    result = solve(Linear(torch.eye(48, dtype=torch.float64) + 1e-4 * (skew - skew.T)), y)
+    assert result["diagnostics"]["asymmetry_relative"] < 5e-2  # mild asymmetry passes
+
+    class Unlabeled(Scale):
+        covariance_kind = None
+    with pytest.raises(ValueError, match="covariance_kind"):
+        solve(Unlabeled(0.5), y)

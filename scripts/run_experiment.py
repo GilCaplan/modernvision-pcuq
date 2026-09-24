@@ -42,7 +42,7 @@ def run_smooth(den, x, sigma, shape_index, cfg, out, tag, freeze, fresh=False):
     smooth = sp.get("smooth", {})
     if not smooth.get("enabled", False):
         return None
-    settings = {"version": 1, "seed": cfg["seed"], "data": cfg["data"],
+    settings = {"version": 2, "seed": cfg["seed"], "data": cfg["data"],
                 "denoiser": cfg["denoiser"], "dtype": str(x.dtype),
                 "device": str(x.device), "sigma": sigma, "shape_index": shape_index,
                 "n_ev": sp["n_ev"], "jacobian": jc,
@@ -65,10 +65,25 @@ def run_smooth(den, x, sigma, shape_index, cfg, out, tag, freeze, fresh=False):
     with graph_context(den, freeze, variant):
         with torch.no_grad():
             x_hat = den(y[None])[0]
-        result = smooth_eigenpairs(
-            den, y, x_hat, sigma, k=sp["n_ev"], n_basis=settings["n_basis"],
-            n_neighbors=settings["n_neighbors"], method=jc["method"], c=jc["c"],
-            batch_jvp=jc.get("batch_jvp", 2))
+        try:
+            result = smooth_eigenpairs(
+                den, y, x_hat, sigma, k=sp["n_ev"], n_basis=settings["n_basis"],
+                n_neighbors=settings["n_neighbors"], method=jc["method"], c=jc["c"],
+                batch_jvp=jc.get("batch_jvp", 2))
+        except ValueError as e:
+            # Same policy as the baseline's symmetry gate: record, don't report modes.
+            result = {"diagnostics": {"smooth_rejected": str(e)}}
+    if "smooth_rejected" in result["diagnostics"]:
+        metrics = {**result["diagnostics"], "covariance_kind": den.covariance_kind,
+                   "trustworthy": False, "seconds": time.time() - started}
+        result.update({"x": x.detach().cpu(), "y": y.detach().cpu(),
+                       "x_hat": x_hat.detach().cpu(), "settings": settings,
+                       "metrics": metrics, "figures": []})
+        temporary = path.with_suffix(".pt.tmp")
+        torch.save(result, temporary)
+        temporary.replace(path)
+        print(f"[{tag}] smooth modes REJECTED (too asymmetric)")
+        return metrics
     values, vectors = result["eigvals"], result["eigvecs"]
     figures = [f"{tag}_smooth_modes.png"]
     plot_modes(x_hat, vectors, values, out / figures[0])
@@ -82,7 +97,11 @@ def run_smooth(den, x, sigma, shape_index, cfg, out, tag, freeze, fresh=False):
             figures.append(sweep.name)
         elif sweep.exists():
             sweep.unlink()  # remove an obsolete positive-variance visualization
+    # Smooth modes come from a direct eigendecomposition of the reduced matrix, so
+    # there is no convergence or Ritz-residual criterion to fail: passing the
+    # symmetry gate is the whole trustworthy test (cf. diagnostics.is_trustworthy).
     metrics = {**result["diagnostics"], "eigvals": values.tolist(),
+               "covariance_kind": den.covariance_kind, "trustworthy": True,
                "seconds": time.time() - started}
     result.update({"x": x.detach().cpu(), "y": y.detach().cpu(),
                    "x_hat": x_hat.detach().cpu(), "settings": settings,
@@ -187,6 +206,7 @@ def main() -> None:
                 with torch.no_grad():
                     x_hat = den(y[None])[0]  # anchor forward (fills the graph cache)
 
+                rejected = False
                 try:
                     eigvecs, eigvals, history, spectrum_diag = top_eigenpairs(
                         den, y, sigma, k=sp["n_ev"], iters=sp["iters"],
@@ -207,33 +227,39 @@ def main() -> None:
                     print(f"[{tag}] REJECTED by top_eigenpairs (too asymmetric)")
                     with open(out / "metrics.json", "w") as f:
                         json.dump(metrics, f, indent=2)
-                    continue
-
-                m.update({
-                    "mse_noisy": float(((y - x) ** 2).mean()),
-                    "mse_denoised": float(((x_hat - x) ** 2).mean()),
-                    "eigvals": eigvals.cpu().tolist(),
-                    "final_iter_overlap": history[-1].tolist(),
-                    "subspace_principal_angle_history_degrees": [
-                        angles.tolist()
-                        for angles in spectrum_diag["subspace_principal_angles_degrees"]
-                    ],
-                    "final_subspace_max_angle_degrees": float(
-                        spectrum_diag["subspace_principal_angles_degrees"][-1].max()),
-                    "ritz_relative_residuals": spectrum_diag["ritz_relative_residuals"].tolist(),
-                    "psd": psd_report(eigvals.cpu()),
-                    "covariance_kind": den.covariance_kind,
-                    # asymmetry of J restricted to the uncertainty subspace
-                    "antisym_energy_subspace": antisym_energy_fd(
-                        den, y, eigvecs, method=jc["method"], c=jc["c"]),
-                })
-                m["trustworthy"] = is_trustworthy(m)
-                if si == 0:  # per-sigma diagnostics, once on the first shape
-                    sweep = sweep_step_size if analytic else sweep_step_size_fd
-                    m["step_size_sweep"] = sweep(den, y, dg["step_size_sweep"],
-                                                 method=jc["method"])
-                    if analytic:
-                        m["antisym_energy_probes"] = antisym_energy(den, y)
+                    rejected = True
+                else:
+                    m.update({
+                        "mse_noisy": float(((y - x) ** 2).mean()),
+                        "mse_denoised": float(((x_hat - x) ** 2).mean()),
+                        "eigvals": eigvals.cpu().tolist(),
+                        "final_iter_overlap": history[-1].tolist(),
+                        "subspace_principal_angle_history_degrees": [
+                            angles.tolist()
+                            for angles in spectrum_diag["subspace_principal_angles_degrees"]
+                        ],
+                        "final_subspace_max_angle_degrees": float(
+                            spectrum_diag["subspace_principal_angles_degrees"][-1].max()),
+                        "ritz_relative_residuals": spectrum_diag["ritz_relative_residuals"].tolist(),
+                        "psd": psd_report(eigvals.cpu()),
+                        "covariance_kind": den.covariance_kind,
+                        # asymmetry of J restricted to the uncertainty subspace
+                        "antisym_energy_subspace": antisym_energy_fd(
+                            den, y, eigvecs, method=jc["method"], c=jc["c"]),
+                    })
+                    m["trustworthy"] = is_trustworthy(m)
+                    if si == 0:  # per-sigma diagnostics, once on the first shape
+                        sweep = sweep_step_size if analytic else sweep_step_size_fd
+                        m["step_size_sweep"] = sweep(den, y, dg["step_size_sweep"],
+                                                     method=jc["method"])
+                        if analytic:
+                            m["antisym_energy_probes"] = antisym_energy(den, y)
+            if rejected:  # outside the graph context: run_smooth opens its own
+                smooth_metrics = run_smooth(den, x, sigma, si, cfg, out, tag, freeze, args.fresh)
+                if smooth_metrics is not None:
+                    m["smooth"] = smooth_metrics
+                    metrics_path.write_text(json.dumps(metrics, indent=2))
+                continue
             m["seconds"] = time.time() - t0
             metrics[tag] = m
             torch.save({"x": x.cpu(), "y": y.cpu(), "x_hat": x_hat.cpu(),

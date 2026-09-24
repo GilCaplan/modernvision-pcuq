@@ -15,6 +15,68 @@ Entry template:
 
 ---
 
+## 2026-09-24 — Smooth deformation modes merged, gated and run at full scale; depth-map re-tally
+**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** configs/gpu.yaml
+(`--override name=smooth device=cpu`); depth2d: configs/local.yaml (`name=depth2d-retally`)
+**What:** Merged Yakov's smooth-deformation modes (`spectrum.smooth_eigenpairs`,
+docs/SMOOTH_MODES.md) with Galit's `numerics-fixes-and-validation` branch, then
+connected the two:
+1. **Merge conflicts** in `spectrum.py` (kept Galit's Rayleigh–Ritz finalization plus
+   Yakov's function) and `run_experiment.py` imports.
+2. **Freeze variant:** the smooth stage always used `graph_frozen` ("full") while the
+   baseline followed `denoiser.graph_freeze_variant` (default `topology`). Both now go
+   through one `graph_context` helper.
+3. **Same gates as the baseline:** `smooth_eigenpairs` now refuses a denoiser without a
+   `covariance_kind`, and rejects a reduced matrix whose relative asymmetry exceeds 0.05
+   (same measure and threshold as `_rayleigh_ritz`) instead of silently symmetrizing.
+   `run_experiment.py` records `smooth_rejected`, `covariance_kind` and `trustworthy`
+   (= passed the gate; the solve is direct, so there is no convergence criterion).
+4. **Baseline-rejected shapes** now get a smooth stage on a fresh run too (before, only
+   on resume), so smooth statistics don't silently exclude them.
+5. **Yakov's tests had never run** (his machine lacked PyTorch). Two failures fixed:
+   `torch.kron` raised a view/stride error for a single-column basis (replaced by the
+   equivalent einsum), and the pipeline test wrote its config as JSON but read it as
+   YAML, which parses `1e-05` as a string. Added a symmetry-gate test. 41 tests pass.
+6. **Tooling:** `archive_metrics.py` no longer replaces an archived raw file with an
+   older `outputs/` copy (this Mac's pre-fix `outputs/local/` would have overwritten
+   three current archives); `build_results.py` only reads current-pipeline sources
+   (those recording `covariance_kind`), falling back to `results/metrics/raw/`. Before,
+   it preferred `outputs/phase3` and `outputs/masked`, which on this Mac hold pre-fix
+   runs. Archiving also recovered raw metrics the summaries listed as LOST
+   (`phase3`, `ablation-unfrozen`, `masked`, both mask grids; pre-fix pipeline).
+**Result — smooth modes (50 shapes, same noise draws as the n=50 baseline):**
+- Baseline replicates Galit's n=50 run on this machine in range: 5/50 and 8/50
+  rejected (identical), λ₀/σ² 1.073 and 1.419 (vs 1.079, 1.396). At σ=0.05 it drifts
+  (15 vs 13 rejected, −0.89 vs −0.53σ²), the ill-conditioned regime.
+- **Smooth spectra sit at σ² and are almost flat:** λ₀/σ² = 1.011 (σ=0.01) and 1.031
+  (σ=0.02); top-5 spread 0.5% and 1.2% (whole-shape: 2.8% and 12.5%); the smallest of
+  the ~84 reduced eigenvalues is still 0.90σ² / 0.76σ² (medians). Noise2Score3D passes
+  smooth, non-rigid displacements through almost unchanged (J ≈ I there), so its
+  uncertainty over them is the full noise level and nearly isotropic: no preferred
+  bend or stretch. No negative eigenvalues among accepted runs.
+- Rejected by the smooth gate: 4/50, 12/50, 50/50 (σ=0.05, median asymmetry 0.13).
+  Not the same shapes as the whole-shape gate: 7 baseline-rejected shapes pass on the
+  smooth subspace, and 9 at σ=0.02 go the other way.
+- **Seed stability** (`scripts/audit_smooth_seed_stability.py`, 15 trustworthy σ=0.02
+  shapes, new seed 999): 2 rejected under the new seed; eigenvalue ratio 1.000;
+  top-mode overlap median 0.33 (range 0.04–0.89; whole-shape was 0.041); principal
+  angles between the two top-5 subspaces, sorted medians 26°/35°/46°/72°/85°, against
+  67°–88° for random 5-dim subspaces of the same basis. About three smooth directions
+  per shape reproduce; individual modes don't. Better than whole-shape, not a
+  per-mode property.
+**Result — depth-map re-tally (task from the 2026-09-16 depth2d entry; 50 shapes,
+MNIST CNN, baseline render):** 11/50 (22%) rejected outright, 21/50 (42%) accepted but
+non-PSD, 18/50 (36%) PSD; per category (rejected/non-PSD of 10): chair 2/7, airplane
+5/3, table 1/1, lamp 3/4, guitar 0/6. Correction to that entry: the random-probe
+`antisym_energy_probe` is ~1 for accepted shapes too (median 0.98), so it does not
+separate the tiers; the asymmetry that does is the one on the top subspace (near 0 when
+accepted, above the gate when rejected).
+**Also:** a "Mode Display Picker" artifact lets the team choose how the explorer shows a
+mode's change (slider, loop, flicker, filmstrip, change map, arrows, overlay; 2D and
+3D); waiting on Yakov's pick.
+**Next:** swap the explorer's slider for the picked display. Open side-quest items:
+depth-map normalization, `ffhq.pt` provenance, 2D-vs-3D comparison.
+
 ## 2026-09-16 — Closing the region-mode gap: fresh validated exemplars, and a surprising negative result on direction stability
 **Who:** Claude (with Galit) · **Machine:** windows (CPU, ~45 min total) · **Config:**
 configs/gpu.yaml (`--override device=cpu data.n_shapes=15 data.sigmas=[0.02]`)

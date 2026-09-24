@@ -1,6 +1,6 @@
 {
  "source": "results/README.md table 1; docs/LOG.md 2026-08-17 Phase-3 entry and 2026-08-18 comprehensive-evidence entry",
- "raw_artifacts": "outputs/phase3/run_experiment/ \u2014 LOST (outputs/ is empty)",
+ "raw_artifacts": "outputs/phase3/run_experiment/ \u2014 RECOVERED 2026-09-24 from a machine that still had it: raw/phase3__run_experiment.json (pre-2026-09-16 pipeline: no symmetry gate, graph_frozen 'full')",
  "design": "50 shapes x 5 categories per sigma, 5 eigenpairs each (250 eigenvalues per sigma), 15 iters, frozen graph",
  "training_sigma_range": [
   0.004,
@@ -50,5 +50,5 @@
    "beyond_training_range": true
   }
  ],
- "lost": "per-shape values and per-shape local density \u2014 this blocks R6 at sweep scale; region-scale density is in derived/region_runs.json"
+ "lost": "nothing since 2026-09-24: per-shape values are in raw/phase3__run_experiment.json (per-shape local density can be recomputed from it with the shapes; region-scale density is in derived/region_runs.json)"
 }

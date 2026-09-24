@@ -140,7 +140,8 @@ def top_eigenpairs(denoiser: Denoiser, y: torch.Tensor, sigma: float, k: int,
 def smooth_eigenpairs(denoiser: Denoiser, y: torch.Tensor, x_hat: torch.Tensor,
                       sigma: float, k: int, n_basis: int = 30,
                       n_neighbors: int = 16, method: str = "central",
-                      c: float = 1e-3, batch_jvp: int = 2) -> dict:
+                      c: float = 1e-3, batch_jvp: int = 2,
+                      symmetry_tol: float = 5e-2) -> dict:
     """Covariance restricted to smooth, non-rigid displacement fields.
 
     The caller must freeze the denoiser graph at y before calling this function.
@@ -149,7 +150,14 @@ def smooth_eigenpairs(denoiser: Denoiser, y: torch.Tensor, x_hat: torch.Tensor,
     tensors are on CPU; basis has shape (3N, d), eigvecs has shape (k, N, 3).
     Smoothness is a restriction, not evidence of structural ambiguity. Residuals
     refer to the reduced symmetric operator, not the full denoiser Jacobian.
+    Same gates as top_eigenpairs: the denoiser must declare a covariance_kind, and a
+    projected operator more asymmetric than symmetry_tol (same measure as
+    _rayleigh_ritz) is rejected with ValueError instead of silently symmetrized.
     """
+    if denoiser.covariance_kind not in COVARIANCE_KINDS:
+        raise ValueError(
+            f"{type(denoiser).__name__}.covariance_kind = {denoiser.covariance_kind!r} "
+            f"is not a recognized classification — set it to one of {sorted(COVARIANCE_KINDS)}")
     if y.ndim != 2 or y.shape[1] != 3 or x_hat.shape != y.shape:
         raise ValueError("y and x_hat must have shape (N, 3)")
     if not torch.isfinite(y).all() or not torch.isfinite(x_hat).all():
@@ -205,6 +213,11 @@ def smooth_eigenpairs(denoiser: Denoiser, y: torch.Tensor, x_hat: torch.Tensor,
     if not torch.isfinite(covariance).all():
         raise ValueError("nonfinite projected Jacobian products")
     symmetric = (covariance + covariance.T) / 2
+    rel_asymmetry = float((covariance - covariance.T).norm() / symmetric.norm().clamp(min=1e-30))
+    if rel_asymmetry > symmetry_tol:
+        raise ValueError(
+            "projected operator is not symmetric enough for covariance eigenpairs "
+            f"(relative asymmetry {rel_asymmetry:.3g} > {symmetry_tol:.3g})")
     all_values, coefficients = torch.linalg.eigh(symmetric)
     values = all_values.flip(0)[:k]
     coefficients = coefficients.flip(1)[:, :k]
@@ -216,8 +229,7 @@ def smooth_eigenpairs(denoiser: Denoiser, y: torch.Tensor, x_hat: torch.Tensor,
         "basis_dimension": basis.shape[1], "rigid_rank": rank,
         "removed_dimensions": removed,
         "graph_components": int((frequencies.abs() < 1e-10).sum()),
-        "asymmetry_relative": float((covariance - covariance.T).norm() /
-                                    covariance.norm().clamp_min(torch.finfo(covariance.dtype).tiny)),
+        "asymmetry_relative": rel_asymmetry,
         "projected_residuals": (residual / scale).tolist(),
         "roughness": roughness.tolist(),
         "negative_eigenvalues": int((all_values < -1e-10 * scale).sum()),

@@ -20,24 +20,38 @@
 
 ## Module map (`src/pcuq/`)
 
-| Module | Responsibility | Key API (planned) |
+| Module | Responsibility | Key API |
 |---|---|---|
-| `utils.py` | Config dataclass + YAML loading, seeding, device pick (cuda→mps→cpu), output dirs | `load_config(path)`, `set_seed(s)`, `get_device(cfg)` |
-| `data.py` | ModelNet40 loading, mesh→points sampling, normalization; synthetic Gaussian/GMM toy data; corruption `Y = X + σZ` with retained indices | `load_modelnet(cfg)`, `make_toy_gaussian(cfg)`, `corrupt(x, sigma, seed)` |
-| `denoisers.py` | Uniform frozen-denoiser interface + implementations: `AnalyticGaussianDenoiser` (closed-form ground truth), `Noise2Score3DWrapper` (wraps `external/` model) | `Denoiser.denoise(y) -> x_hat`, all `(B,N,3)→(B,N,3)` |
-| `jacobian.py` | JVP backends against a frozen denoiser at anchor `y`: forward-diff, central-diff, autograd (`torch.func.jvp`); symmetrized product | `jvp(denoiser, y, v, method, c)`, `sym_jvp(...) = ½(Jv + Jᵀv)` |
-| `spectrum.py` | Top-k eigenpairs of `σ²·J` via block power/subspace iteration (QR re-orthonormalization each step); optional Lanczos | `top_eigenpairs(denoiser, y, sigma, k, iters, cfg) -> (eigvecs (k,N,3), eigvals (k,), history)` |
-| `diagnostics.py` | The proposal's three challenge checks: step-size sweep, finite-diff↔autograd agreement, permutation-equivariance / ordering preservation, antisymmetric energy, PSD-ness of restricted covariance | `check_equivariance(denoiser, y)`, `antisym_energy(...)`, `sweep_step_size(...)` |
-| `viz.py` | Point clouds colored by per-point uncertainty; eigenmode displacement arrows; `x ± t·√λ·v` sweeps (3D analog of the reference repo's sliders) | `plot_modes(x_hat, eigvecs, eigvals, path)` |
+| `utils.py` | Config YAML loading + CLI overrides, seeding, device pick (cuda→mps→cpu), output dirs | `load_config(path)`, `apply_overrides(cfg, ovs)`, `set_seed(s)`, `get_device(cfg)`, `make_out_dir(cfg, name)` |
+| `data.py` | ModelNet40 loading (official zip, OFF parsing, area-weighted sampling, unit-sphere normalization); toy Gaussian and Gaussian-mixture data; corruption `Y = X + σZ` with retained indices; extremity region masks | `load_modelnet(cfg)`, `make_toy_gaussian(...)`, `make_toy_gmm(...)`, `corrupt(x, sigma, seed)`, `extremity_patch_masks(...)` |
+| `denoisers.py` | Frozen-denoiser interface + implementations: `AnalyticGaussianDenoiser`, `AnalyticGMMDenoiser` (closed-form ground truth), `Noise2Score3DWrapper` (wraps `external/`); `covariance_kind` label on every denoiser; graph freezing (`graph_frozen`, `graph_topology_frozen`) | `Denoiser.denoise(y)`, `COVARIANCE_KINDS`, `.graph_topology_frozen()` |
+| `denoisers2d.py` | The reference paper's own 2D denoisers (MNIST CNN, FFHQ DDPM) behind the same interface | used by `run_images2d.py`, `run_depth2d.py` |
+| `depth.py` | Single-view orthographic depth-map rendering of a point cloud (depth-map side quest) | `render_depth_map(points, resolution, axis, dilate)` |
+| `jacobian.py` | JVP backends against a frozen denoiser at anchor `y`: forward-diff, central-diff, autograd; symmetrized product | `jvp(denoiser, y, v, method, c)`, `sym_jvp(...)` |
+| `spectrum.py` | Top-k eigenpairs of `σ²·J`: subspace iteration + Rayleigh–Ritz with a symmetry gate (optionally region-masked); smooth, non-rigid modes in a low-frequency Laplacian basis with rigid motion removed (same gates) | `top_eigenpairs(den, y, sigma, k, iters, mask=, return_diagnostics=)`, `smooth_eigenpairs(den, y, x_hat, sigma, k, n_basis, n_neighbors)` |
+| `diagnostics.py` | Step-size sweeps, permutation equivariance, antisymmetric energy, PSD report, composite `trustworthy` flag | `check_equivariance`, `antisym_energy_fd`, `sweep_step_size_fd`, `psd_report`, `is_trustworthy` |
+| `viz.py` | Mode figures: per-point magnitude, displacement arrows, `x̂ ± t·√λ·v` sweeps (3D) and 2D image sweeps | `plot_modes`, `plot_mode_arrows`, `plot_mode_sweep`, `plot_sweep_2d` |
 
 ## Entry points (`scripts/`)
 
 Every script: `python scripts/<name>.py --config configs/{local,gpu}.yaml [--override key=val]`
+(except the results/viewer builders, which take no config).
 
-- `sanity_gaussian.py` — Phase 1 gate: analytic denoiser, compares estimated eigenpairs
-  to the closed-form posterior covariance. Must pass before any real-model work.
-- `run_experiment.py` — main pipeline: data → corrupt → denoise → spectrum →
-  diagnostics → viz, all driven by the config.
+| Script | What it does |
+|---|---|
+| `sanity_gaussian.py` | Phase-1 gate: analytic Gaussian + GMM, estimated vs closed-form eigenpairs |
+| `check_denoiser.py` | Phase-2 gate: vets the real frozen denoiser (MSE, equivariance, spectrum) |
+| `run_experiment.py` | Main pipeline: data → corrupt → denoise → whole-shape spectrum → diagnostics → figures; plus smooth modes when `spectrum.smooth.enabled` |
+| `run_masked_modes.py` | Region-restricted modes (extremity patches) |
+| `run_fullspectrum.py`, `run_fullspectrum2d.py` | Rank-k spectra that back the viewer's free-form masks |
+| `run_images2d.py` | The reference method on its own domain (MNIST, FFHQ) through our pipeline |
+| `run_depth2d.py` | Side quest: ModelNet shapes as depth maps through the reference 2D denoisers |
+| `audit_graph_freezing.py` | `full` vs `topology` graph freezing on real shapes |
+| `audit_seed_stability.py`, `audit_region_seed_stability.py`, `audit_smooth_seed_stability.py` | Do whole-shape / region / smooth modes survive a new noise seed? |
+| `summarize_results.py` | Tables from one `run_experiment` output directory |
+| `archive_metrics.py` | Copies `outputs/*/*/metrics.json` into git-tracked `results/metrics/` (never over a newer archive) |
+| `build_results.py` | Regenerates `results/README.md` + figures from current-pipeline sources |
+| `export_viewer_data.py` + `viewer_template.html` | Data bundle and template for the interactive Uncertainty Mode Explorer |
 
 ## Reference implementation crib sheet
 

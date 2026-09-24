@@ -15,7 +15,8 @@ python -m pip install -r requirements.txt
 ```
 
 Real-denoiser runs require the Noise2Score3D repository and pretrained checkpoint.
-If missing, restore them with these PowerShell commands (skip anything already present):
+If missing, restore them with these PowerShell commands (skip anything already present;
+on macOS/Linux use the `curl` commands in [WORKFLOW.md](WORKFLOW.md)):
 
 ```powershell
 git clone --depth 1 https://github.com/Bobby645/Noise2Score3D external/Noise2Score3D
@@ -60,9 +61,12 @@ determines where the denoiser runs. Graph eigendecomposition runs on CPU.
 | `jacobian.batch_jvp` | Number of smooth basis directions processed together. Smaller batches reduce intermediate memory use. |
 | `jacobian.method`, `jacobian.c` | Jacobian-product method and finite-difference step size. Smooth modes accept `forward`, `central`, or `autograd`. |
 | `denoiser.freeze_graph` | Freezes the real denoiser's graph at the noisy anchor while computing derivatives. Keep enabled for the intended smooth-branch analysis. |
+| `denoiser.graph_freeze_variant` | Which freeze both stages use: `topology` (default since the 2026-09-16 audit) or `full`. The smooth stage follows the same setting as the baseline. |
 
 Require `1 <= n_neighbors < N`, `1 <= n_basis <= N`, and at least `n_ev`
-independent directions after rigid-motion removal. `spectrum.iters` controls the
+independent directions after rigid-motion removal. `local.yaml` leaves smooth modes
+off (its default denoiser is the analytic toy); `gpu.yaml` turns them on, which
+roughly doubles run time (about 84 extra Jacobian products per shape and sigma). `spectrum.iters` controls the
 baseline iteration only; smooth modes use direct eigendecomposition of a reduced
 matrix. The smooth reduced matrix is always symmetrized.
 
@@ -113,9 +117,14 @@ modes = result["eigvecs"]  # (number of modes, N, 3)
 | `reduced_covariance` | Raw projected matrix `(d,d)`, before symmetrization. |
 | `laplacian_eigenvalues`, `graph_edges` | Retained scalar graph frequencies and undirected edges `(2,E)`. |
 | `settings`, `figures` | Settings used to check reuse and the current result's figure filenames. |
-| `diagnostics`, `metrics` | Numerical diagnostics; metrics additionally contain eigenvalues and runtime. |
+| `diagnostics`, `metrics` | Numerical diagnostics; metrics additionally contain eigenvalues, runtime, `covariance_kind` and `trustworthy`. |
 
-The existing `metrics.json` also receives a `smooth` entry for each completed run.
+A rejected run (see the symmetry gate below) stores only `x`, `y`, `x_hat`,
+`settings` and `metrics`, with `metrics["smooth_rejected"]` holding the reason and
+no figures.
+
+The existing `metrics.json` also receives a `smooth` entry for each completed run,
+including shapes whose whole-shape baseline was rejected by the symmetry gate.
 Diagnostics include basis dimension, removed rigid dimensions, connected-component
 count, covariance asymmetry, mode roughness, and projected eigenpair residuals.
 The negative-eigenvalue count covers the entire reduced spectrum, with a numerical
@@ -152,11 +161,34 @@ Graph edges may connect distinct nearby surfaces, and disconnected components ca
 move independently. Compare neighborhood and basis sizes before interpreting modes.
 Symmetrization does not guarantee positive covariance eigenvalues.
 
+**Same gates as the baseline.** `smooth_eigenpairs` refuses a denoiser without a
+`covariance_kind` label, and rejects the run with `ValueError` when the reduced
+matrix is too asymmetric to call a covariance: relative asymmetry
+`‖C − Cᵀ‖ / ‖(C + Cᵀ)/2‖ > symmetry_tol` (default 0.05, the same measure and
+threshold as `top_eigenpairs`). `run_experiment.py` records a rejection instead of
+crashing. Smooth modes come from a direct eigendecomposition, so there is no
+convergence or Ritz-residual criterion: `trustworthy` is simply "passed the symmetry
+gate".
+
 This implementation uses dense CPU graph eigendecomposition: quadratic storage and
 cubic solve cost in point count. It targets the existing approximately 2,048-point
 experiments; increasing resolution substantially can be expensive.
 
-At the time this guide was added, implementation tests had been written but had
-not been successfully run: the available default Python lacked PyTorch. In the
-project environment, run `python -m pytest tests/test_smooth.py` to check the dense
-analytic comparison, rigid-motion removal, edge cases, saving, and resume behavior.
+Tests: `python -m pytest tests/test_smooth.py` covers the dense analytic
+comparison, rigid-motion removal, edge cases, the symmetry gate, saving and resume
+behavior (all passing as of 2026-09-24).
+
+## Results and stability check
+
+Results for the full 50-shape run are in [results/README.md](../results/README.md)
+§5 and [LOG.md](LOG.md) (2026-09-24). Whether a smooth mode survives a new noise draw
+of the same points is checked by:
+
+```bash
+python scripts/audit_smooth_seed_stability.py --config configs/gpu.yaml --override name=smooth device=cpu
+```
+
+It reads the trustworthy σ=0.02 smooth runs of `outputs/smooth/run_experiment/`,
+recomputes them with a new noise seed, and compares eigenvalues, per-mode overlap and
+subspace principal angles against the angles two random subspaces of the same smooth
+basis would give. Archive both runs afterwards with `python scripts/archive_metrics.py`.

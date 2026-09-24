@@ -56,8 +56,11 @@ Goal: prove the whole pipeline end-to-end where the answer is known in closed fo
 - [x] Antisymmetry / PSD monitoring in every run (antisym ≤0.01 in-distribution;
       191/250 negative eigvals at out-of-range σ=0.05 — a finding, not a bug)
 - [x] Convergence tracked per run (overlap history saved in each .pt)
-- [ ] Optional follow-ups: σ=0.03 run (breakdown boundary), unfrozen ablation slice
-      at full scale for the A/B table
+- [x] Optional follow-ups: σ=0.03 run (breakdown boundary), unfrozen ablation slice
+      at full scale for the A/B table — both done 2026-08-18 (50 shapes at σ=0.03:
+      1.91σ²; 15-shape unfrozen ablation), under the pre-2026-09-16 pipeline. Raw
+      metrics recovered 2026-09-24 into `results/metrics/raw/phase3__run_experiment.json`
+      and `ablation-unfrozen__run_experiment.json`; not re-run under the fixes.
 - [x] Graph-freezing audit (small scale, 2026-09-16, see LOG.md): `graph_frozen`
       (the freezing used for the 1.06σ² headline above) is REJECTED by
       `top_eigenpairs`'s symmetry gate on 2/3 real shapes tested; a new, weaker
@@ -132,18 +135,42 @@ geometric uncertainty modes for shape *regions*.
 - [x] `viz`: mask-aware modes/sweeps + `plot_mode_arrows` (direction is the
       interpretable content; magnitude coloring alone is too faint)
 - [x] `scripts/run_masked_modes.py`: region gallery with resume
-- [ ] **Gate (in progress):** first 20 region runs show spreads up to 29% @ σ=0.02
-      and ~10–24% typical @ σ=0.03 (vs 1–8% whole-shape) — structure exists; the
-      15-shape gallery + σ=0.03 sweep + unfrozen ablation are running for the
-      comprehensive tables (see LOG.md when they land)
+- [x] **Gate:** region spreads up to 29–33% @ σ=0.02 and ~10–24% typical @ σ=0.03
+      (vs 1–8% whole-shape). 60-run gallery done 2026-08-18 (28/30 and 22/30
+      converged+PSD); re-run under the fixed pipeline 2026-09-16 (46 runs, 87%
+      trustworthy) — see LOG.md.
+
+## Phase 3.6 — Smooth, non-rigid deformation modes ✅
+
+Yakov's addition (docs/SMOOTH_MODES.md): restrict σ²·J to low-frequency graph-Laplacian
+displacement fields with rigid motion removed.
+
+- [x] `spectrum.smooth_eigenpairs` + `run_experiment.py` stage (`spectrum.smooth.*`),
+      tests in `tests/test_smooth.py`
+- [x] Integrated with the 2026-09-16 pipeline: shared freeze variant, symmetry gate,
+      `covariance_kind`, `trustworthy`; runs for baseline-rejected shapes too
+- [x] Smoke on the real model (local profile + overrides), then 50 shapes × 3 σ
+      (`results/metrics/raw/smooth__run_experiment.json`): smooth spectra sit at σ²
+      and are nearly flat (spread ~1%); all σ=0.05 runs rejected
+- [x] Seed stability: ~3 of 5 top directions reproduce, individual modes don't
+      (`smooth__audit_smooth_seed_stability.json`) — results/README.md §5, LOG.md
+      2026-09-24
 
 ## Phase 4 — Analysis, visualization, report
 
-- [ ] `viz.py`: eigenmode displacement fields on point clouds (± amounts along mode,
-      like the reference repo's image sliders, but as 3D arrows / animated offsets)
-- [ ] Quantitative tables: eigenvalue spectra vs σ; validation-gate results
-- [ ] Failure cases + discussion (where the linearization breaks)
-- [ ] Write-up / figures
+- [x] `viz.py`: eigenmode displacement fields on point clouds (± amounts along mode,
+      like the reference repo's image sliders, but as 3D arrows / animated offsets) —
+      `plot_mode_arrows`, `plot_mode_sweep`, plus the interactive Uncertainty Mode
+      Explorer (claude.ai artifact; template in `scripts/viewer_template.html`)
+- [x] Quantitative tables: eigenvalue spectra vs σ; validation-gate results —
+      `results/README.md` §1–5, `results/metrics/`
+- [x] Failure cases + discussion (where the linearization breaks) — σ=0.05 breakdown,
+      symmetry-gate rejections, direction instability under reseeding, depth-map
+      failure tiers: `results/README.md` + LOG.md 2026-09-16/24
+- [ ] Explorer: replace the t-slider with the display the team picks (options on the
+      "Mode Display Picker" artifact, 2026-09-24; waiting on Yakov's choice)
+- [ ] Write-up / figures — figures and `results/README.md` are ready; the course
+      report text itself lives outside this repo
 
 ## Side quest — depth-map 2D benchmark (not started)
 
@@ -170,11 +197,12 @@ out of its training domain (digits/faces) on a depth-map "photo" of a 3D shape.
       quote severity numbers with their render config attached, see LOG.md.
 - [ ] Decide if depth maps need per-shape intensity/contrast normalization before
       the reference denoiser's fixed training sigma is meaningful on them
-- [ ] Re-tally the ~50%/44-52% non-PSD rate above under the 2026-09-16 pipeline fixes
-      (LOG.md): the old eigensolver never rejected anything, so a subset of those
-      shapes were actually antisym~1 (near-orthogonal Jv/J^Tv, essentially garbage,
-      3/10 in a small resample) rather than the mild low-antisym breakdown the 44-52%
-      figure describes — two tiers, not one; the report should split them
+- [x] Re-tally the ~50%/44-52% non-PSD rate above under the 2026-09-16 pipeline fixes
+      — done 2026-09-24 (50 shapes, baseline render, MNIST CNN,
+      `results/metrics/raw/depth2d-retally__run_depth2d.json`): **22% rejected
+      outright, 42% accepted but non-PSD, 36% PSD**. Per category (rejected /
+      non-PSD of 10): chair 2/7, airplane 5/3, table 1/1, lamp 3/4, guitar 0/6.
+      The axis/dilate robustness variants were not re-run under the fixes.
 - [ ] Track down `ffhq.pt`'s exact source (not recorded anywhere in the repo — a
       pre-existing gap) if a natural-image comparison point is wanted
 - [ ] Qualitative + eigval/σ² comparison against the in-domain 3D result; viewer

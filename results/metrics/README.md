@@ -14,7 +14,7 @@ before quoting it in the report.**
 
 | Tier | What | Authority |
 |---|---|---|
-| `raw/` | verbatim `metrics.json` copied from `outputs/`, whatever exists at archive time (12 files currently) | authoritative — full per-run detail |
+| `raw/` | verbatim `metrics.json` copied from `outputs/`, whatever exists at archive time (21 files currently) | authoritative — full per-run detail |
 | `derived/` | per-run tables rebuilt from the committed viewer bundles | authoritative for the fields present; some fields were never exported |
 | `summary/` | medians transcribed from `results/README.md` and `docs/LOG.md` | summary only unless its `raw_artifacts` field points at a `raw/` file that still exists — check before assuming per-shape data is gone |
 

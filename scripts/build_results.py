@@ -28,10 +28,50 @@ BLUE, ORANGE, AQUA, GRAY = "#2a78d6", "#eb6834", "#1baf7a", "#9a9a94"
 INK, INK2 = "#333333", "#666666"
 TRAIN_SIGMA_MAX = 0.034  # Noise2Score3D training range, models/KPconv.py:159
 
+# Interpretation of the smooth-mode run (docs/LOG.md 2026-09-24); kept next to the
+# numbers it describes so a rerun with different results gets re-read, not reused.
+SMOOTH_FINDING = (
+    "**Along smooth deformations the denoiser behaves almost like the identity.** "
+    "In range, the smooth eigenvalues sit at σ² (λ₀ ≈ 1.01–1.03σ², and even the "
+    "smallest of the ~84 smooth-subspace eigenvalues is ~0.76–0.90σ²), with a top-5 "
+    "spread of about 1%, flatter than the whole-shape spectrum. Noise2Score3D does "
+    "not shrink smooth, non-rigid displacements, so its uncertainty over them is the "
+    "full noise level and nearly the same for every smooth deformation: no single "
+    "bend or stretch stands out. Rejections are not the same shapes as the "
+    "whole-shape gate's: some shapes the baseline rejects pass on the smooth "
+    "subspace and vice versa. At σ=0.05 every smooth run is rejected (median "
+    "asymmetry 0.13), consistent with the out-of-range breakdown in §1.")
+SMOOTH_STABILITY = (
+    "Eigenvalues reproduce exactly. Individual smooth modes do not (top-mode "
+    "overlap ranges from 0.04 to 0.89 across shapes), but about three directions "
+    "of the top-5 subspace do: 2–4 principal angles per shape fall below the "
+    "chance minimum. That is better than the whole-shape modes (§3: top-mode "
+    "overlap 0.04, max angle 89°), yet still not a per-mode property: read the "
+    "figures below as one noisy observation.")
+
 
 def load(path):
     p = ROOT / path
     return json.loads(p.read_text()) if p.exists() else None
+
+
+def is_current(metrics) -> bool:
+    """True if a metrics.json comes from the 2026-09-16+ pipeline (Rayleigh-Ritz,
+    symmetry gate): only those runs record covariance_kind or a rejection. A
+    machine can still hold older runs in outputs/phase3 or outputs/masked; those
+    must never silently replace current numbers in the report."""
+    return bool(metrics) and any(
+        isinstance(m, dict) and ("covariance_kind" in m or "top_eigenpairs_rejected" in m)
+        for m in metrics.values())
+
+
+def first_current(*paths):
+    """(metrics, path) of the first current-pipeline source, else (None, None)."""
+    for path in paths:
+        metrics = load(path)
+        if is_current(metrics):
+            return metrics, path
+    return None, None
 
 
 def style(ax, title):
@@ -253,6 +293,145 @@ def pick_exemplars(masked, masked_src, n=6):
     return picked
 
 
+def _spread(eigvals):
+    """Top-to-last gap, meaningful only for a positive spectrum (None otherwise)."""
+    return (eigvals[0] - eigvals[-1]) / eigvals[0] if min(eigvals) > 0 else None
+
+
+def _median_spread(runs):
+    vals = [v for v in (_spread(m["eigvals"]) for m in runs) if v is not None]
+    return float(np.median(vals)) if vals else None
+
+
+def chart_smooth(smooth):
+    """Smooth, non-rigid modes (spectrum.smooth_eigenpairs) next to the whole-shape
+    baseline of the SAME runs: top eigenvalue / sigma^2 and top-k spread."""
+    groups = by_sigma(smooth)
+    rows = {}
+    fig, axes = plt.subplots(1, 2, figsize=(8.4, 3.4))
+    rng = np.random.default_rng(2)
+    ticks, cols = [], []
+    for i, (sig, runs) in enumerate(groups.items()):
+        whole = [m for m in runs if "top_eigenpairs_rejected" not in m]
+        sm_all = [m["smooth"] for m in runs if "smooth" in m]
+        sm = [x for x in sm_all if "smooth_rejected" not in x]
+        rows[sig] = {
+            "n": len(sm_all), "rejected": len(sm_all) - len(sm),
+            "whole_rejected_smooth_ok": sum(1 for m in runs if "top_eigenpairs_rejected" in m
+                                            and "smooth_rejected" not in m.get("smooth", {"smooth_rejected": 1})),
+            "lam0": float(np.median([x["eigvals"][0] / sig**2 for x in sm])) if sm else None,
+            "lam0_whole": float(np.median([m["eigvals"][0] / sig**2 for m in whole])) if whole else None,
+            "spread": _median_spread(sm),
+            "spread_whole": _median_spread(whole),
+            "with_negative": sum(1 for x in sm if x["negative_eigenvalues"] > 0),
+            "asymmetry": float(np.median([x["asymmetry_relative"] for x in sm])) if sm else None,
+        }
+        for ax, f in ((axes[0], lambda e: e[0] / sig**2), (axes[1], _spread)):
+            for j, (vals, color) in enumerate(((whole, BLUE), (sm, ORANGE))):
+                v = np.array([y for y in (f(m["eigvals"]) for m in vals) if y is not None])
+                if not len(v):
+                    continue
+                x = 2.6 * i + j + rng.uniform(-0.13, 0.13, len(v))
+                ax.scatter(x, np.clip(v, -2, 4), s=10, color=color, alpha=0.5, linewidths=0)
+                ax.hlines(np.median(v), 2.6 * i + j - 0.22, 2.6 * i + j + 0.22, color=INK, lw=2)
+        cols.append(2.6 * i + 0.5)
+        ticks.append(f"σ={sig}" + ("\n(beyond\ntraining range)" if sig > TRAIN_SIGMA_MAX else ""))
+    axes[0].axhline(1.0, color=GRAY, lw=1.2, ls="--")
+    for ax, title in ((axes[0], "top eigenvalue / σ²"),
+                      (axes[1], "top-k spread (λ₀−λₖ₋₁)/λ₀, positive spectra")):
+        ax.set_xticks(cols, ticks)
+        style(ax, title)
+    axes[1].scatter([], [], color=BLUE, label="whole shape (baseline)")
+    axes[1].scatter([], [], color=ORANGE, label="smooth, rigid motion removed")
+    axes[1].legend(fontsize=7.5, frameon=False, loc="upper right")
+    fig.suptitle("Smooth deformation modes vs whole-shape modes (same runs; "
+                 "rejected runs excluded)", fontsize=10, color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    fig.savefig(FIG / "smooth_vs_whole.png", dpi=170)
+    plt.close(fig)
+    return rows
+
+
+def pick_smooth_exemplars(smooth, src, n=3, sigma=0.02):
+    """Trustworthy, all-positive smooth runs at sigma, largest spread, one per
+    category. Falls back to smooth figures already committed in results/figures."""
+    scored = sorted(((_spread(m["smooth"]["eigvals"]), tag) for tag, m in smooth.items()
+                     if tag.endswith(f"sigma{sigma}") and m.get("smooth", {}).get("trustworthy")
+                     and min(m["smooth"]["eigvals"]) > 0), reverse=True)
+    picked, seen = [], set()
+    for spread, tag in scored:
+        if tag.split("_")[0] in seen:
+            continue
+        files = [src / f"{tag}_smooth_{s}.png" for s in ("modes", "mode0_arrows", "mode0_sweep")]
+        if not all(f.exists() for f in files):
+            continue
+        seen.add(tag.split("_")[0])
+        for f in files:
+            shutil.copy(f, FIG / f.name)
+        picked.append((tag, spread))
+        if len(picked) == n:
+            break
+    if not picked:
+        picked = [(f.name[:-len("_smooth_modes.png")], None)
+                  for f in sorted(FIG.glob("*_smooth_modes.png"))]
+    return picked
+
+
+def smooth_section(rows, audit, exemplars):
+    """README section 5: smooth, non-rigid deformation modes (docs/SMOOTH_MODES.md)."""
+    fmt = lambda v, f: f.format(v) if v is not None else "—"
+    lines = [
+        "## 5. Smooth deformation modes: rigid motion removed",
+        "",
+        "`spectrum.smooth_eigenpairs` (docs/SMOOTH_MODES.md) restricts σ²·J to smooth "
+        "displacement fields: the lowest graph-Laplacian frequencies on x̂, with global "
+        "translations and infinitesimal rotations projected out (~84 directions). The "
+        "reduced matrix is solved exactly and passes the same symmetry gate as the "
+        "whole-shape spectrum. Same 50 shapes and noise draws as §1, whole-shape "
+        "baseline recomputed alongside:",
+        "",
+        "![smooth vs whole](figures/smooth_vs_whole.png)",
+        "",
+        "| σ | smooth λ₀/σ² | smooth top-5 spread | whole-shape λ₀/σ² | whole-shape top-5 spread* "
+        "| smooth rejected | runs with a negative smooth eigenvalue |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for sig, r in rows.items():
+        note = " ⚠" if sig > TRAIN_SIGMA_MAX else ""
+        lines.append(
+            f"| {sig}{note} | {fmt(r['lam0'], '{:.3f}')} | {fmt(r['spread'], '{:.1%}')} | "
+            f"{fmt(r['lam0_whole'], '{:.2f}')} | {fmt(r['spread_whole'], '{:.1%}')} | "
+            f"{r['rejected']}/{r['n']} | {r['with_negative']}/{r['n'] - r['rejected']} |")
+    lines += ["", "*Spreads use only runs whose top-5 eigenvalues are all positive. "
+              "The whole-shape columns come from this re-run, not §1: in range they "
+              "match §1 closely; at σ=0.05 they differ (§1: −0.53σ², 13/50 rejected), "
+              "that regime being ill-conditioned enough for machine-level "
+              "floating-point differences to show.", "", SMOOTH_FINDING, ""]
+    if audit and audit.get("summary", {}).get("median_max_subspace_angle_degrees") is not None:
+        a = audit["summary"]
+        lines += [
+            f"**Direction stability (new noise seed, same points, {a['n']} trustworthy "
+            f"σ=0.02 shapes, `scripts/audit_smooth_seed_stability.py`):** top eigenvalue "
+            f"ratio {a['median_top_eigval_ratio']:.3f}; top-mode overlap "
+            f"{a['median_top_mode_overlap']:.2f}; principal angles between the two top-5 "
+            f"subspaces span {a['median_min_subspace_angle_degrees']:.0f}°–"
+            f"{a['median_max_subspace_angle_degrees']:.0f}° (medians), against "
+            f"{a['chance_median_min_angle_degrees']:.0f}°–"
+            f"{a['chance_median_max_angle_degrees']:.0f}° for two random 5-dimensional "
+            "subspaces of the same smooth basis. " + SMOOTH_STABILITY,
+            "",
+        ]
+    if exemplars:
+        lines += ["Example smooth modes at σ=0.02 (mode magnitudes, mode-0 arrows, "
+                  "mode-0 sweep x̂ ± t·√λ·v), each for one noisy observation:", ""]
+        for tag, _ in exemplars:
+            lines += [f"### {tag} (smooth)", "",
+                      f"![{tag} smooth modes](figures/{tag}_smooth_modes.png)",
+                      f"![{tag} smooth arrows](figures/{tag}_smooth_mode0_arrows.png)",
+                      f"![{tag} smooth sweep](figures/{tag}_smooth_mode0_sweep.png)", ""]
+    return lines
+
+
 def _load_unfrozen_ablation(path: str):
     """outputs/<x>/run_experiment/metrics.json is a generic smoke-test scratch
     location -- it can (and, mid-2026-09, did) hold whatever was last run there:
@@ -270,16 +449,23 @@ def _load_unfrozen_ablation(path: str):
 
 def main() -> None:
     FIG.mkdir(parents=True, exist_ok=True)
-    phase3 = load("outputs/phase3/run_experiment/metrics.json") \
-        or load("outputs/gpu/run_experiment/metrics.json")  # current profile name
-    masked_path = "outputs/masked/masked_modes/metrics.json"
-    masked = load(masked_path)
-    if masked is None:
-        masked_path = "outputs/gpu/masked_modes/metrics.json"  # current profile name
-        masked = load(masked_path)
+    # Current-pipeline sources only; results/metrics/raw/ is the durable fallback
+    # when outputs/ has been cleared (archive_metrics.py).
+    phase3, _ = first_current("outputs/gpu/run_experiment/metrics.json",
+                              "results/metrics/raw/gpu__run_experiment.json",
+                              "outputs/phase3/run_experiment/metrics.json")
+    masked, masked_path = first_current("outputs/gpu/masked_modes/metrics.json",
+                                        "outputs/masked/masked_modes/metrics.json")
+    masked_chart = masked or first_current("results/metrics/raw/gpu__masked_modes.json")[0]
     ablation = _load_unfrozen_ablation("outputs/ablation-unfrozen/run_experiment/metrics.json")
+    if not is_current(ablation):
+        ablation = None  # a pre-fix ablation would mix pipelines; keep the committed chart
+    smooth, smooth_path = first_current("outputs/smooth/run_experiment/metrics.json",
+                                        "results/metrics/raw/smooth__run_experiment.json")
+    smooth_audit = (load("outputs/smooth/audit_smooth_seed_stability/metrics.json")
+                    or load("results/metrics/raw/smooth__audit_smooth_seed_stability.json"))
     if phase3 is None:
-        sys.exit("no phase3 results found — run the sweep first (docs/WORKFLOW.md)")
+        sys.exit("no current-pipeline sweep found — run the sweep first (docs/WORKFLOW.md)")
 
     calib = chart_calibration(phase3)
     frozen02 = [m for m in by_sigma(phase3)[0.02] if "top_eigenpairs_rejected" not in m]
@@ -288,8 +474,11 @@ def main() -> None:
     if unfrozen02 and frozen02:
         chart_ablation(frozen02, unfrozen02, 0.02)
     exemplars = pick_exemplars(masked, (ROOT / masked_path).parent) if masked else []
-    if masked:
-        chart_structure(phase3, masked)
+    if masked_chart:
+        chart_structure(phase3, masked_chart)
+    smooth_rows = chart_smooth(smooth) if smooth and any("smooth" in m for m in smooth.values()) else None
+    smooth_ex = (pick_smooth_exemplars(smooth, (ROOT / smooth_path).parent)
+                 if smooth_rows else [])
     depth_example_shapes = render_depth_examples()
 
     lines = [
@@ -426,14 +615,17 @@ def main() -> None:
             # then duplicated when they're independently regenerated below.
             next_h2 = old.find("\n## ", start)
             chunk = old[start:next_h2] if next_h2 != -1 else old[start:]
-            lines += chunk.rstrip("\n").split("\n")
-            n_exemplars = chunk.count(marker)
+            lines += chunk.rstrip("\n").split("\n") + [""]
+            n_exemplars = chunk.count(marker) + chunk.startswith("### ")
         else:
             n_exemplars = 0
 
+    if smooth_rows:
+        lines += smooth_section(smooth_rows, smooth_audit, smooth_ex)
+
     if depth_example_shapes:
         lines += [
-            "## 5. Side quest: shapes as depth-map images",
+            "## 6. Side quest: shapes as depth-map images",
             "",
             "`scripts/run_depth2d.py` (docs/LOG.md 2026-09-11/16) renders each "
             "ModelNet40 shape into a single-view depth-map image and runs it "
@@ -448,13 +640,15 @@ def main() -> None:
             "",
             "The 28x28 MNIST-scale image is genuinely this blocky — a full "
             "point cloud compressed to fewer pixels than it has dimensions of "
-            "variation. Finding: roughly half of shapes at this scale produce a "
-            "non-PSD implied covariance (negative eigenvalues) under the frozen "
-            "MNIST CNN, via a *low-antisymmetry* mechanism distinct from the "
-            "3D noise-range breakdown above — and a sharper failure mode "
-            "(pipeline fix, 2026-09-16): ~30% of shapes are rejected outright "
-            "as too asymmetric to call a covariance at all, which the original "
-            "eigensolver couldn't detect. See docs/LOG.md for the full numbers.",
+            "variation. Finding (50 shapes, MNIST CNN, re-tallied under the "
+            "fixed pipeline 2026-09-24): two failure tiers. **11/50 (22%) are "
+            "rejected outright** — the operator on the top subspace is too "
+            "asymmetric to call a covariance, which the original eigensolver "
+            "couldn't detect. **21/50 (42%) are accepted but non-PSD** "
+            "(negative eigenvalues with near-zero asymmetry on the top subspace), "
+            "a mechanism distinct from the 3D noise-range breakdown above. Only "
+            "18/50 (36%) give a PSD spectrum. The old ~50% non-PSD figure mixed "
+            "the first two tiers. See docs/LOG.md 2026-09-24.",
         ]
 
     (OUT / "README.md").write_text("\n".join(lines), encoding="utf-8")

@@ -64,6 +64,13 @@ For a point cloud with N points, `y ∈ R^{N×3}`, so `J ∈ R^{3N×3N}` and eig
    `vᵀJv` products or JVP+VJP).
 5. **Output:** eigenvalues (uncertainty magnitude) + eigenvector displacement fields
    rendered on the point cloud.
+6. **Restricted operators:** whole-shape spectra turn out nearly flat, so the same
+   operator is also restricted to (a) extremity **regions** (`M·J·M`, the reference
+   paper's patch masks in 3D) and (b) **smooth, non-rigid deformations**: a
+   low-frequency graph-Laplacian basis `B` on `x̂` with global translations and
+   infinitesimal rotations removed, giving the small matrix `σ²·Bᵀ J B`
+   ([SMOOTH_MODES.md](SMOOTH_MODES.md)). Both pass the same symmetry gate as the
+   whole-shape spectrum.
 
 ## Our delta over prior work
 

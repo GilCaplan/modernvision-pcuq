@@ -1,0 +1,386 @@
+{
+  "runs": {
+    "airplane_0627": {
+      "eigval_ratio_vs_original_seed": [
+        0.9963719150545493,
+        1.0172028606489172,
+        1.0075680849368471,
+        1.008476001267963,
+        1.008053478061618
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.747854179916406,
+        0.602989258618482,
+        0.4078793660632227,
+        0.16328115555990308,
+        0.13280315459315162
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        30.503323176536835,
+        36.67799521995929,
+        47.70111135720651,
+        77.39705428239152,
+        80.02339614242585
+      ],
+      "chance_median_max_angle_degrees": 88.58843442657702,
+      "chance_median_min_angle_degrees": 66.66696084235147,
+      "ref_eigval_spread": 0.03154293084235936,
+      "ref_eigval0_over_sigma2": 1.056859623216563,
+      "basis_dimension": 84
+    },
+    "airplane_0628": {
+      "eigval_ratio_vs_original_seed": [
+        1.0050992472958304,
+        0.9950380361793987,
+        1.0012260069279821,
+        1.0000683993006463,
+        0.998279429176269
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.3324169165457997,
+        0.2317998860308722,
+        0.13332452899618885,
+        0.1398541080801939,
+        0.03368145513652348
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        26.898116279659845,
+        35.37582004853818,
+        47.6252004680913,
+        75.30871212909221,
+        85.0946288964038
+      ],
+      "chance_median_max_angle_degrees": 88.56135384409518,
+      "chance_median_min_angle_degrees": 66.43639138937982,
+      "ref_eigval_spread": 0.016126376528977155,
+      "ref_eigval0_over_sigma2": 1.047606015919599,
+      "basis_dimension": 84
+    },
+    "airplane_0629": {
+      "eigval_ratio_vs_original_seed": [
+        0.97659240374424,
+        0.9983852508663361,
+        0.9988163352808138,
+        0.9893417697541087,
+        0.9970027515363092
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.0893618949840218,
+        0.030684188739428672,
+        0.07050837463726461,
+        0.4531414546159515,
+        0.009960030811793242
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        25.68825290470228,
+        31.277542672787092,
+        40.88397942263657,
+        83.5082688964763,
+        89.75398466380942
+      ],
+      "chance_median_max_angle_degrees": 87.96821769133531,
+      "chance_median_min_angle_degrees": 66.40965959354904,
+      "ref_eigval_spread": 0.04008793616132015,
+      "ref_eigval0_over_sigma2": 1.067198494965299,
+      "basis_dimension": 84
+    },
+    "airplane_0630": {
+      "eigval_ratio_vs_original_seed": [
+        0.9966037434367497,
+        0.9994170119103997,
+        0.9988730570372787,
+        0.994154165142821,
+        0.9945434169875241
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.8940940203295227,
+        0.1714120266437209,
+        0.11084989597094053,
+        0.31966065130721155,
+        0.2232244250972169
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        24.662861475668077,
+        33.3093733921222,
+        36.23978420083137,
+        45.08861573280675,
+        88.56711071330716
+      ],
+      "chance_median_max_angle_degrees": 88.37740053672326,
+      "chance_median_min_angle_degrees": 66.89479755730302,
+      "ref_eigval_spread": 0.023894721321995754,
+      "ref_eigval0_over_sigma2": 1.0523126320291822,
+      "basis_dimension": 84
+    },
+    "airplane_0631": {
+      "eigval_ratio_vs_original_seed": [
+        0.9900306763408632,
+        0.9972900103404617,
+        0.9994016069134334,
+        0.9983061124132051,
+        0.9985729507074553
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.7466302304689052,
+        0.6255934681365581,
+        0.10346785537168837,
+        0.025345781553756205,
+        0.51079173154317
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        31.35964142424286,
+        37.896289858791555,
+        41.76034038993755,
+        48.77617786235451,
+        81.07366625009459
+      ],
+      "chance_median_max_angle_degrees": 88.33675432912212,
+      "chance_median_min_angle_degrees": 66.9982513994154,
+      "ref_eigval_spread": 0.020770123802294115,
+      "ref_eigval0_over_sigma2": 1.04555995879756,
+      "basis_dimension": 84
+    },
+    "airplane_0632": {
+      "eigval_ratio_vs_original_seed": [
+        0.9995586669897725,
+        1.003336506471437,
+        0.9999567789189654,
+        0.9996685920754356,
+        1.0026096492414418
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.7958239253771007,
+        0.3113242308652838,
+        0.3752374309629691,
+        0.730795605432485,
+        0.09950470359768383
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        21.39744688671677,
+        27.985765102872985,
+        32.90389171252863,
+        40.06019572473371,
+        72.31510952297378
+      ],
+      "chance_median_max_angle_degrees": 88.4101217660401,
+      "chance_median_min_angle_degrees": 66.7872750807151,
+      "ref_eigval_spread": 0.01277132124385622,
+      "ref_eigval0_over_sigma2": 1.035428171113432,
+      "basis_dimension": 84
+    },
+    "airplane_0633": {
+      "eigval_ratio_vs_original_seed": [
+        1.0061453697345952,
+        1.004999196408952,
+        0.9989916726516096,
+        0.9984375918931364,
+        0.9972556315306974
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.18632157341463965,
+        0.10979502511831574,
+        0.13641812279646234,
+        0.5538915018300186,
+        0.06675223980511263
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        26.370130909158544,
+        36.16792645055858,
+        46.3889049833749,
+        72.22240975425674,
+        89.40467117628218
+      ],
+      "chance_median_max_angle_degrees": 88.3079344500303,
+      "chance_median_min_angle_degrees": 66.95466790710522,
+      "ref_eigval_spread": 0.008238645404988306,
+      "ref_eigval0_over_sigma2": 1.0308247615889876,
+      "basis_dimension": 84
+    },
+    "airplane_0634": {
+      "eigval_ratio_vs_original_seed": [
+        1.0345560588698235,
+        1.0127452529012742,
+        1.0024256204817938,
+        1.0043438961796827,
+        1.0015188448795174
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.05859651021723763,
+        0.018961707884901407,
+        0.11240263642406659,
+        0.18802791804887492,
+        0.045378122595237436
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        30.14441248822566,
+        42.498898903150376,
+        69.0131874168885,
+        80.43034408558151,
+        85.04304783897858
+      ],
+      "chance_median_max_angle_degrees": 88.20396346984742,
+      "chance_median_min_angle_degrees": 67.31352774229963,
+      "ref_eigval_spread": 0.01612206175692996,
+      "ref_eigval0_over_sigma2": 1.0434383135341867,
+      "basis_dimension": 84
+    },
+    "airplane_0635": {
+      "smooth_rejected": "projected operator is not symmetric enough for covariance eigenpairs (relative asymmetry 0.111 > 0.05)"
+    },
+    "airplane_0636": {
+      "eigval_ratio_vs_original_seed": [
+        1.0061515150010718,
+        1.0033944370001078,
+        1.0020907186890446,
+        1.000443872012509,
+        1.0025975062834498
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.710434138477666,
+        0.4015965709667765,
+        0.16106989866587443,
+        0.13767401646418814,
+        0.10489730148372435
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        22.621758002528807,
+        38.23231211389572,
+        41.86363794904608,
+        65.18957934520984,
+        87.05277151746097
+      ],
+      "chance_median_max_angle_degrees": 88.60303066186074,
+      "chance_median_min_angle_degrees": 66.39708999536666,
+      "ref_eigval_spread": 0.009200175473271077,
+      "ref_eigval0_over_sigma2": 1.0341298452299341,
+      "basis_dimension": 84
+    },
+    "chair_0890": {
+      "eigval_ratio_vs_original_seed": [
+        0.9924068458552917,
+        0.9979925630180294,
+        0.998449919998316,
+        0.9969042643185934,
+        0.9964461893905289
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.03964202294683551,
+        0.69925336657289,
+        0.526959313135215,
+        0.48829615060486153,
+        0.0715285826104794
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        27.342809295566084,
+        34.50236164150794,
+        63.48938899201369,
+        80.65278597656898,
+        89.15946858079356
+      ],
+      "chance_median_max_angle_degrees": 88.26737094361395,
+      "chance_median_min_angle_degrees": 66.99689694429323,
+      "ref_eigval_spread": 0.012038893119792704,
+      "ref_eigval0_over_sigma2": 1.0260195506750798,
+      "basis_dimension": 84
+    },
+    "chair_0891": {
+      "smooth_rejected": "projected operator is not symmetric enough for covariance eigenpairs (relative asymmetry 0.0966 > 0.05)"
+    },
+    "chair_0892": {
+      "eigval_ratio_vs_original_seed": [
+        0.9935853122547894,
+        0.9955234401923065,
+        1.0018345762247234,
+        1.0017948627601507,
+        1.0006153700323157
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.700824829883193,
+        0.15601335255137522,
+        0.27186020919689147,
+        0.5014828601881645,
+        0.29478976838088006
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        28.860374900111378,
+        41.83994167009536,
+        45.68136589773089,
+        50.40450341628331,
+        75.62002389660981
+      ],
+      "chance_median_max_angle_degrees": 88.46937665096942,
+      "chance_median_min_angle_degrees": 66.94224281346882,
+      "ref_eigval_spread": 0.012550322596941948,
+      "ref_eigval0_over_sigma2": 1.0234562846097126,
+      "basis_dimension": 84
+    },
+    "chair_0893": {
+      "eigval_ratio_vs_original_seed": [
+        1.0017924248047794,
+        1.0022709399320375,
+        1.000252602411227,
+        1.0027942001163512,
+        1.0008863030993702
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.3053865151417745,
+        0.5727561650577603,
+        0.16126732015868672,
+        0.06737983270616688,
+        0.1479354912428852
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        25.571785509742682,
+        31.733540709749423,
+        53.92719271345486,
+        62.646052428851995,
+        85.86979025732101
+      ],
+      "chance_median_max_angle_degrees": 88.18816698012692,
+      "chance_median_min_angle_degrees": 66.66796556963936,
+      "ref_eigval_spread": 0.005246485610294945,
+      "ref_eigval0_over_sigma2": 1.022650219295234,
+      "basis_dimension": 84
+    },
+    "chair_0894": {
+      "eigval_ratio_vs_original_seed": [
+        1.0022138073452667,
+        0.997988787714302,
+        1.003408444091112,
+        1.0026553003275462,
+        1.001315804185213
+      ],
+      "mode_overlap_vs_original_seed": [
+        0.10685470406833666,
+        0.1558015618783301,
+        0.21784175622498783,
+        0.28588824241938526,
+        0.16252075240424918
+      ],
+      "subspace_principal_angles_degrees_vs_original_seed": [
+        24.70970747499183,
+        30.424656191331813,
+        35.84275792475986,
+        77.98095636300403,
+        84.43052910342253
+      ],
+      "chance_median_max_angle_degrees": 88.27609858196818,
+      "chance_median_min_angle_degrees": 67.0167311315077,
+      "ref_eigval_spread": 0.012047006584187578,
+      "ref_eigval0_over_sigma2": 1.0224281878063517,
+      "basis_dimension": 84
+    }
+  },
+  "summary": {
+    "n": 15,
+    "n_rejected_under_new_seed": 2,
+    "median_top_eigval_ratio": 0.9995586669897725,
+    "median_top_mode_overlap": 0.3324169165457997,
+    "median_max_subspace_angle_degrees": 85.0946288964038,
+    "median_min_subspace_angle_degrees": 26.370130909158544,
+    "chance_median_max_angle_degrees": 88.33675432912212,
+    "chance_median_min_angle_degrees": 66.89479755730302,
+    "median_ref_eigval_spread": 0.01277132124385622,
+    "median_ref_eigval0_over_sigma2": 1.035428171113432
+  }
+}

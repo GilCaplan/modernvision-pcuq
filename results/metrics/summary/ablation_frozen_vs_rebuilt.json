@@ -1,6 +1,6 @@
 {
  "source": "docs/LOG.md 2026-08-18 comprehensive-evidence entry; results/figures/frozen_vs_rebuilt.png",
- "raw_artifacts": "outputs/ablation-unfrozen/ \u2014 LOST",
+ "raw_artifacts": "outputs/ablation-unfrozen/ \u2014 RECOVERED 2026-09-24 from a machine that still had it: raw/ablation-unfrozen__run_experiment.json (pre-2026-09-16 pipeline: no symmetry gate, graph_frozen 'full')",
  "design": "15 shapes @ sigma=0.02, medians",
  "graph_rebuilt": {
   "lam0_over_sigma2": 2.91,

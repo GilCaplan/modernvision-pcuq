@@ -55,13 +55,21 @@ def local_spacing(pts: np.ndarray, k: int = 6) -> np.ndarray:
 
 
 def archive_raw() -> list[str]:
-    """Copy authoritative metrics.json files out of outputs/ (if any exist)."""
+    """Copy authoritative metrics.json files out of outputs/ (if any exist).
+
+    Never replaces an archived file with an OLDER run: a machine that still has
+    pre-2026-09-16 runs in outputs/ (e.g. outputs/local/) would otherwise overwrite
+    the current-pipeline archive with stale numbers."""
     dst = OUT / "raw"
     dst.mkdir(parents=True, exist_ok=True)
     found = []
     for p in sorted((ROOT / "outputs").glob("*/*/metrics.json")):
         name = f"{p.parent.parent.name}__{p.parent.name}.json"
-        shutil.copyfile(p, dst / name)
+        target = dst / name
+        if target.exists() and p.stat().st_mtime < target.stat().st_mtime:
+            print(f"raw/     : kept {name} (outputs/ copy is older than the archive)")
+            continue
+        shutil.copyfile(p, target)
         found.append(name)
     return found
 
@@ -167,7 +175,7 @@ SUMMARY = {
     "calibration_by_sigma": {
         "source": "results/README.md table 1; docs/LOG.md 2026-08-17 Phase-3 entry "
                   "and 2026-08-18 comprehensive-evidence entry",
-        "raw_artifacts": "outputs/phase3/run_experiment/ — LOST (outputs/ is empty)",
+        "raw_artifacts": "outputs/phase3/run_experiment/ — RECOVERED 2026-09-24 from a machine that still had it: raw/phase3__run_experiment.json (pre-2026-09-16 pipeline: no symmetry gate, graph_frozen 'full')",
         "design": "50 shapes x 5 categories per sigma, 5 eigenpairs each "
                   "(250 eigenvalues per sigma), 15 iters, frozen graph",
         "training_sigma_range": [0.004, 0.034],
@@ -185,8 +193,10 @@ SUMMARY = {
              "median_convergence": 0.408, "antisym_energy": None,
              "lam0_over_sigma2_range": [-7, 7], "beyond_training_range": True},
         ],
-        "lost": "per-shape values and per-shape local density — this blocks R6 at "
-                "sweep scale; region-scale density is in derived/region_runs.json",
+        "lost": "nothing since 2026-09-24: per-shape values are in "
+                "raw/phase3__run_experiment.json (per-shape local density can be "
+                "recomputed from it with the shapes; region-scale density is in "
+                "derived/region_runs.json)",
     },
     "calibration_by_sigma_2026_09_16": {
         "source": "docs/LOG.md 2026-09-16 'Full n=50 confirmation' entry",
@@ -264,7 +274,7 @@ SUMMARY = {
     "ablation_frozen_vs_rebuilt": {
         "source": "docs/LOG.md 2026-08-18 comprehensive-evidence entry; "
                   "results/figures/frozen_vs_rebuilt.png",
-        "raw_artifacts": "outputs/ablation-unfrozen/ — LOST",
+        "raw_artifacts": "outputs/ablation-unfrozen/ — RECOVERED 2026-09-24 from a machine that still had it: raw/ablation-unfrozen__run_experiment.json (pre-2026-09-16 pipeline: no symmetry gate, graph_frozen 'full')",
         "design": "15 shapes @ sigma=0.02, medians",
         "graph_rebuilt": {"lam0_over_sigma2": 2.91, "antisym_energy": 0.34,
                           "convergence": 0.18},
@@ -273,7 +283,7 @@ SUMMARY = {
     },
     "masked_gallery": {
         "source": "docs/LOG.md 2026-08-18 comprehensive-evidence entry",
-        "raw_artifacts": "outputs/masked_modes/ — LOST (distinct from the mask GRID "
+        "raw_artifacts": "outputs/masked/masked_modes/ — RECOVERED 2026-09-24 from a machine that still had it: raw/masked__masked_modes.json (pre-2026-09-16 pipeline: no symmetry gate, graph_frozen 'full') (distinct from the mask GRID "
                          "in derived/region_runs.json: different regions per shape)",
         "design": "60 region runs, 15 shapes x 2 sigmas x 2 regions",
         "sigma_0.02": {"converged_and_psd": 28, "total": 30, "max_spread": 0.33},
@@ -374,7 +384,7 @@ def main() -> None:
         n_region=len(derived["region_runs"]["runs"]),
         n_whole=len(derived["whole_shape_spectra"]["runs"]),
         n_2d=len(derived["images2d"]["runs"]),
-        n_raw=len(found)), encoding="utf-8")
+        n_raw=len(list((OUT / "raw").glob("*.json")))), encoding="utf-8")
     total = sum(p.stat().st_size for p in OUT.rglob("*") if p.is_file())
     print(f"\ndone -> {OUT} ({total / 1e3:.0f} kB total)")
 
