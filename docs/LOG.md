@@ -15,6 +15,22 @@ Entry template:
 
 ---
 
+## 2026-09-27 — Explorer: GIF-style loop with arrows replaces the t-slider
+**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**What:** The team picked how the explorer shows a mode's change (options were compared
+on the "Mode Display Picker" artifact). Both the 3D and 2D tabs now loop: sweep
+t = −3 → +3 (2.6 s, eased), hold the t = +3 frame with arrows (2.2 s), rest at the start
+(0.4 s), repeat. Pausing shows a chosen still: Start (t=−3), End (t=+3) or Arrows. The
+slider, Oscillate and Reset t controls are gone; display gain stays.
+**Arrows:** 3D arrows are the exact displacement of each region point from t=−3 to +3,
+for the 160 points that move most, scaled to the 90th-percentile length (some modes are
+dominated by a few points, which would otherwise shrink every other arrow to nothing),
+with outliers capped; the on-canvas label states the scaling. 2D arrows are estimated
+edge motion (Lucas–Kanade on 3 px cells for digits, 8 px for faces) between the t=−3 and
+t=+3 frames inside the box, cached per image/mode/gain/box.
+**Result:** published to the same explorer link (version 12); `scripts/viewer_template.html`
+regenerated from the live page (it predated the toy tab).
+
 ## 2026-09-24 — Smooth deformation modes merged, gated and run at full scale; depth-map re-tally
 **Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** configs/gpu.yaml
 (`--override name=smooth device=cpu`); depth2d: configs/local.yaml (`name=depth2d-retally`)

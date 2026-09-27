@@ -167,8 +167,10 @@ displacement fields with rigid motion removed.
 - [x] Failure cases + discussion (where the linearization breaks) — σ=0.05 breakdown,
       symmetry-gate rejections, direction instability under reseeding, depth-map
       failure tiers: `results/README.md` + LOG.md 2026-09-16/24
-- [ ] Explorer: replace the t-slider with the display the team picks (options on the
-      "Mode Display Picker" artifact, 2026-09-24; waiting on Yakov's choice)
+- [x] Explorer: replaced the t-slider (2026-09-27) with a GIF-style loop — sweep
+      t=−3→+3, then the end frame with arrows for ~2 s — plus a paused view toggle
+      (Start / End / Arrows). 3D arrows are exact point displacements; 2D arrows are
+      Lucas–Kanade flow estimates. `scripts/viewer_template.html` synced to the live page
 - [ ] Write-up / figures — figures and `results/README.md` are ready; the course
       report text itself lives outside this repo
 

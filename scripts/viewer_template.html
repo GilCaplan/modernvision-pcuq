@@ -68,6 +68,11 @@
                  border-radius: 99px; margin-left: 8px; vertical-align: 3px; }
   .readout b { color: var(--ink); font-weight: 500; }
   .hidden { display: none !important; }
+  .tbadge { position: absolute; left: 14px; top: 12px; font-family: var(--mono);
+            font-size: 12px; color: var(--ink); background: #1c2129e6;
+            border: 1px solid var(--line); border-radius: 6px; padding: 3px 9px;
+            pointer-events: none; font-variant-numeric: tabular-nums; z-index: 2; }
+  .tbadge .dim { color: var(--muted); }
   .tooltip { position: absolute; pointer-events: none; background: #232a35f2;
              border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px;
              font-family: var(--mono); font-size: 11.5px; color: var(--ink);
@@ -78,6 +83,27 @@
     aside { width: 100%; border-right: 0; border-bottom: 1px solid var(--line);
             max-height: 46vh; }
   }
+
+  .toy-pix-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .toy-pix-card { display:flex; flex-direction:column; gap:6px; align-items:stretch; }
+  .toy-pix-label { font-size:11px; color:var(--muted); text-align:center; font-family:var(--mono); }
+  .toy-pixgrid { display:grid; gap:1px; background:var(--line); border-radius:6px; overflow:hidden; aspect-ratio:1; width:100%; }
+  .toy-pixgrid > div { aspect-ratio:1; }
+  .toy-slider-row { display:flex; flex-direction:column; gap:4px; margin-bottom:12px; }
+  .toy-slabel { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
+  .toy-slabel b { color:var(--ink); font-family:var(--mono); }
+  .toy-confbar { display:flex; height:24px; border-radius:6px; overflow:hidden; font-family:var(--mono); font-size:12px; font-weight:600; }
+  .toy-confbar span { display:flex; align-items:center; justify-content:center; color:#0b0d10; }
+  .toy-readout { display:flex; flex-wrap:wrap; gap:16px; font-family:var(--mono); font-size:13px; }
+  .toy-item { display:flex; flex-direction:column; gap:2px; }
+  .toy-item span { font-size:11px; color:var(--muted); font-family:var(--sans); }
+  .toy-item b { color:var(--coral); }
+  .toy-btn { font-family:var(--sans); font-size:12.5px; font-weight:600; padding:7px 12px; border-radius:7px;
+             border:1px solid var(--line); background:var(--panel-2); color:var(--ink); cursor:pointer; }
+  .toy-btn-primary { background:var(--coral); border-color:var(--coral); color:#1c1210; }
+  .toy-callout { background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:12px 14px;
+                 font-size:12.5px; color:var(--ink); margin-top:16px; line-height:1.6; }
+  .toy-callout code { font-family:var(--mono); }
 </style>
 <div class="app">
   <header>
@@ -89,6 +115,7 @@
     <div class="tabs" role="tablist">
       <button class="tab" id="tab3d" aria-pressed="true">3D point clouds — our extension</button>
       <button class="tab" id="tab2d" aria-pressed="false">2D images — original method's domain</button>
+      <button class="tab" id="tab3" aria-pressed="false">Toy example — real digits, exact math</button>
     </div>
   </header>
   <div class="main">
@@ -114,14 +141,16 @@
       <div id="g-run2d" class="hidden"><p class="group-label">Image</p><div class="chips" id="runs2d"></div></div>
       <div><p class="group-label">Mode &middot; eigenvalue &lambda;</p><div class="modes" id="modes"></div></div>
       <div>
-        <p class="group-label">Sweep t (units of &radic;&lambda;)</p>
+        <p class="group-label">Sweep t = &minus;3 &rarr; +3 (units of &radic;&lambda;), then arrows</p>
         <div class="slider-row">
-          <input type="range" id="t" min="-3" max="3" step="0.05" value="0" aria-label="sweep amount t">
-          <span class="t-readout" id="tval">t=0.00</span>
+          <button id="play" aria-pressed="true">Pause</button>
+          <span class="t-readout" id="tval">t=&minus;3.00</span>
         </div>
-        <div class="slider-row" style="margin-top:8px">
-          <button id="osc" aria-pressed="false">Oscillate</button>
-          <button id="reset">Reset t</button>
+        <p class="group-label" style="margin:12px 0 6px">When paused, show</p>
+        <div class="chips" id="pauseview" role="group" aria-label="paused view">
+          <button data-view="start" aria-pressed="false">Start (t=&minus;3)</button>
+          <button data-view="end" aria-pressed="false">End (t=+3)</button>
+          <button data-view="arrows" aria-pressed="true">Arrows</button>
         </div>
       </div>
       <div id="g-amp">
@@ -144,9 +173,59 @@
     </aside>
     <div class="viewport">
       <canvas id="c"></canvas>
+      <div class="tbadge" id="tbadge"></div>
       <div class="tooltip hidden" id="tip"></div>
       <div class="legend" id="legend"></div>
       <div class="hint" id="hint">drag to rotate &middot; scroll to zoom</div>
+    </div>
+  </div>
+  <div id="toypanel" class="hidden" style="flex:1; min-height:0; overflow-y:auto; padding:20px 20px 40px;">
+    <div style="max-width:640px;margin:0 auto;">
+      <p style="color:var(--muted);font-size:12.5px;line-height:1.6;margin:0 0 18px;">
+        The digit chips on the 2D tab use a real trained checkpoint that turns out to be speckle-like at its one fixed
+        noise level (see the warning in that tab's readout). This panel sidesteps that: the "denoiser" here is a
+        <b style="color:var(--ink)">closed-form, exact Bayes-optimal MMSE estimator</b> for a world where the clean
+        image is exactly one of two real MNIST test-set digits (index 195 = "3", index 184 = "8") — no network, no
+        checkpoint, nothing that can be speckle-like. Drag <b style="color:var(--ink)">t</b> and <b style="color:var(--ink)">&sigma;</b>,
+        press Step, and the exact same math (Tweedie&#8217;s formula, Jacobian-vector products, power iteration) plays
+        out on fully legible digit pixels.
+      </p>
+      <div class="toy-pix-row">
+        <div class="toy-pix-card"><div class="toy-pixgrid" id="pg-A"></div><span class="toy-pix-label">prototype — digit 3</span></div>
+        <div class="toy-pix-card"><div class="toy-pixgrid" id="pg-B"></div><span class="toy-pix-label">prototype — digit 8</span></div>
+        <div class="toy-pix-card"><div class="toy-pixgrid" id="pg-y"></div><span class="toy-pix-label">y — the ambiguous scan</span></div>
+        <div class="toy-pix-card"><div class="toy-pixgrid" id="pg-D"></div><span class="toy-pix-label">D(y) — denoised</span></div>
+      </div>
+      <div style="max-width:480px;margin:18px auto 0">
+        <div class="toy-slider-row">
+          <div class="toy-slabel"><span>t — where the scan sits between "3" and "8"</span><b id="lbl-t">0.50</b></div>
+          <input type="range" id="sl-t" min="0" max="1" step="0.01" value="0.5">
+        </div>
+        <div class="toy-slider-row">
+          <div class="toy-slabel"><span>&sigma; — noise scale (sharper boundary at low &sigma;)</span><b id="lbl-sigma">&mdash;</b></div>
+          <input type="range" id="sl-sigma" min="1" max="100" step="1" value="35">
+        </div>
+        <div class="toy-confbar" id="confbar">
+          <span id="conf-a" style="background:var(--blue)">3</span><span id="conf-b" style="background:var(--coral)">8</span>
+        </div>
+      </div>
+      <div class="toy-pix-row" style="margin-top:20px">
+        <div class="toy-pix-card" style="grid-column:span 2"><div class="toy-pixgrid" id="pg-v"></div><span class="toy-pix-label">top eigenvector v (this run)</span></div>
+        <div style="grid-column:span 2; display:flex; flex-direction:column; gap:12px; justify-content:center">
+          <div class="toy-readout">
+            <div class="toy-item"><span>iteration</span><b id="td-iter">0</b></div>
+            <div class="toy-item"><span>|cos &ang;| to 3&harr;8 axis</span><b id="td-cos">&mdash;</b></div>
+            <div class="toy-item"><span>&lambda; estimate</span><b id="td-lambda">&mdash;</b></div>
+            <div class="toy-item"><span>&lambda; / &sigma;&sup2;</span><b id="td-ratio">&mdash;</b></div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="toy-btn toy-btn-primary" id="td-step">Step &#9656;</button>
+            <button class="toy-btn" id="td-play">Auto-play</button>
+            <button class="toy-btn" id="td-reset">Reset v</button>
+          </div>
+        </div>
+      </div>
+      <div class="toy-callout" id="td-callout">Drag <b>t</b> to the middle (0.50) — the scan is now equidistant from both digits, the denoiser is maximally unsure, and one step of power iteration will snap <code>v</code> exactly onto the 3&harr;8 direction.</div>
     </div>
   </div>
 </div>
@@ -264,7 +343,8 @@
   const st = { tab: "3d", shape: runs3[0].shape, sigma: null, region: null,
                method: "frozen", run2: 0, mode: 0, t: 0, amp: 4,
                yaw: 0.7, pitch: -0.35, zoom: 1,
-               osc: !reduced, spin: false, dimctx: true, ghost: true, heat: false,
+               play: !reduced, pauseView: "arrows", arrows: false, arrowNote: "",
+               spin: false, dimctx: true, ghost: true, heat: false,
                painting: false, moveMode: true, maskCenter: null,
                brush: 22, painted: new Set(), freeRun: null,
                img: 0, box: null, free2d: null, boxes: {} };
@@ -399,7 +479,7 @@
   }
   $("spin").checked = st.spin;
   $("amp").value = st.amp; $("ampval").innerHTML = "&times;" + st.amp;
-  $("osc").setAttribute("aria-pressed", String(st.osc));
+  syncPlayUI();
 
   const shapes = [...new Set(runs3.map(r => r.shape))];
   const sigmasFor = s => [...new Set(runs3.filter(r => r.shape === s).map(r => r.sigma))].sort((a, b) => a - b);
@@ -636,6 +716,50 @@
       ctx.arc(p.x, p.y, (p.k === 1 ? 2.3 : 1.7) * lerp(0.75, 1.15, d), 0, 6.2832);
       ctx.fill();
     }
+    st.arrowNote = "";
+    if (st.arrows && mode) {
+      const a = st.amp * Math.sqrt(Math.abs(r.eigvals[st.mode] || 0));
+      const order = mags.map((m, j) => j).sort((i, j) => mags[j] - mags[i])
+        .slice(0, 160);
+      const segs = order.map(j => {
+        const i = r.mask_idx[j], d0 = [0, 1, 2].map(c => base[3 * i + c]);
+        const s0 = proj(...d0.map((v, c) => v - 3 * a * mode[3 * j + c]));
+        const s1 = proj(...d0.map((v, c) => v + 3 * a * mode[3 * j + c]));
+        return [s0[0], s0[1], s1[0] - s0[0], s1[1] - s0[1], mags[j] / magMax];
+      });
+      // Scale to the typical (90th-percentile) motion, not the longest: some modes are
+      // dominated by a few points, which would shrink every other arrow to nothing.
+      const lens = segs.map(g => Math.hypot(g[2], g[3])).sort((x, y) => x - y);
+      const typical = Math.max(lens[Math.floor(0.9 * (lens.length - 1))], 1e-9);
+      const k = typical < 22 ? 22 / typical : 1, cap = 60;
+      let clipped = 0;
+      drawArrows(segs.map(g => {
+        let dx = k * g[2], dy = k * g[3];
+        const L = Math.hypot(dx, dy);
+        if (L > cap) { dx *= cap / L; dy *= cap / L; clipped++; }
+        return [g[0], g[1], g[0] + dx, g[1] + dy, g[4]];
+      }));
+      st.arrowNote = (k > 1 ? `arrows t=&minus;3&rarr;+3, lengthened &times;${k.toFixed(1)}`
+                            : "arrows t=&minus;3&rarr;+3, to scale")
+                     + (clipped ? `, ${clipped} longest capped` : "");
+    }
+  }
+  function drawArrows(segs) {  // [x0, y0, x1, y1, strength 0..1] in canvas px
+    ctx.save();
+    ctx.strokeStyle = ctx.fillStyle = "#f4f6fb";
+    ctx.lineWidth = 1.4;
+    for (const [x0, y0, x1, y1, u] of segs) {
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      if (len < 1.5) continue;
+      ctx.globalAlpha = 0.35 + 0.65 * u;
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      const ang = Math.atan2(y1 - y0, x1 - x0), hl = Math.min(7, 0.45 * len + 2);
+      ctx.beginPath(); ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - hl * Math.cos(ang - 0.45), y1 - hl * Math.sin(ang - 0.45));
+      ctx.lineTo(x1 - hl * Math.cos(ang + 0.45), y1 - hl * Math.sin(ang + 0.45));
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
   }
 
   // ---------- 2D rendering: PNG base + live box-mask modes ----------
@@ -684,6 +808,59 @@
       ctx.fillStyle = "#ff8a7a";
       ctx.fillRect(bx + bw - 5, by + bh - 5, 10, 10);  // drag me to resize
     }
+    st.arrowNote = "";
+    if (st.arrows && u && b) {
+      const f = flow2d(e, c, fr, u, span);
+      if (f.arrows.length) {
+        const kk = f.cell * 0.95 / f.max;
+        drawArrows(f.arrows.map(([x, y, dx, dy, m]) => [ox + x * scale, oy + y * scale,
+          ox + (x + dx * kk) * scale, oy + (y + dy * kk) * scale, m / f.max]));
+        st.arrowNote = `estimated edge motion t=&minus;3&rarr;+3 (longest ${f.max.toFixed(2)} px, drawn ${kk.toFixed(1)}&times;)`;
+      } else st.arrowNote = "no reliable edge motion in the box; raise the display gain";
+    }
+  }
+  const FLOW = {};
+  function flow2d(e, c, fr, u, span) {
+    // Luminance at t=-3 and t=+3 over the box (+margin), then per-cell Lucas-Kanade.
+    const b = fr.box, fx = e.w / e.mw, fy = e.h / e.mh;
+    const key = [st.img, st.mode, st.amp, b.x0, b.x1, b.y0, b.y1].join("|");
+    if (FLOW.key === key) return FLOW.val;
+    const a = 3 * st.amp * Math.sqrt(Math.max(fr.eigvals[st.mode], 0)) / span;
+    const m = 3, X0 = Math.max(1, Math.floor(b.x0 * fx) - m), X1 = Math.min(e.w - 1, Math.ceil(b.x1 * fx) + m);
+    const Y0 = Math.max(1, Math.floor(b.y0 * fy) - m), Y1 = Math.min(e.h - 1, Math.ceil(b.y1 * fy) + m);
+    const W = X1 - X0 + 2, H = Y1 - Y0 + 2, npix = e.w * e.h, A = new Float32Array(W * H), B = new Float32Array(W * H);
+    const wts = e.c === 1 ? [1] : [0.299, 0.587, 0.114];
+    for (let y = Y0 - 1; y <= Y1; y++) for (let x = X0 - 1; x <= X1; x++) {
+      const p = y * e.w + x, mx = Math.min(e.mw - 1, (x / fx) | 0), my = Math.min(e.mh - 1, (y / fy) | 0);
+      const inBox = mx >= b.x0 && mx < b.x1 && my >= b.y0 && my < b.y1;
+      let la = 0, lb = 0;
+      for (let ch = 0; ch < e.c; ch++) {
+        const v = c.base[ch * npix + p], d = inBox ? a * u[ch * e.mh * e.mw + my * e.mw + mx] : 0;
+        la += wts[ch] * (v - d); lb += wts[ch] * (v + d);
+      }
+      const q = (y - Y0 + 1) * W + (x - X0 + 1);
+      A[q] = la * 255; B[q] = lb * 255;
+    }
+    const cell = e.w < 64 ? 3 : 8, arrows = [];
+    for (let cy = Y0 + cell / 2; cy < Y1; cy += cell) for (let cx = X0 + cell / 2; cx < X1; cx += cell) {
+      let sxx = 0, sxy = 0, syy = 0, sxt = 0, syt = 0, cnt = 0;
+      for (let y = Math.max(Y0, cy - cell | 0); y < Math.min(Y1, cy + cell); y++)
+        for (let x = Math.max(X0, cx - cell | 0); x < Math.min(X1, cx + cell); x++) {
+          const q = (y - Y0 + 1) * W + (x - X0 + 1);
+          const gx = (A[q + 1] + B[q + 1] - A[q - 1] - B[q - 1]) / 4;
+          const gy = (A[q + W] + B[q + W] - A[q - W] - B[q - W]) / 4, it = B[q] - A[q];
+          sxx += gx * gx; sxy += gx * gy; syy += gy * gy; sxt += gx * it; syt += gy * it; cnt++;
+        }
+      const det = sxx * syy - sxy * sxy, tr = sxx + syy;
+      const lmin = tr / 2 - Math.sqrt(Math.max(0, tr * tr / 4 - det));
+      if (det <= 0 || lmin < 0.16 * cnt) continue;  // too little texture to trust
+      const dx = -(syy * sxt - sxy * syt) / det, dy = -(sxx * syt - sxy * sxt) / det;
+      const mag = Math.hypot(dx, dy);
+      if (mag > 0.04 && mag < 2 * cell) arrows.push([cx, cy, dx, dy, mag]);
+    }
+    FLOW.key = key;
+    FLOW.val = { arrows, cell, max: arrows.reduce((mm, g) => Math.max(mm, g[4]), 0) };
+    return FLOW.val;
   }
   function boxCursor(ev) {  // cursor position in mode-res coords, or null
     if (!imgs2.length) return null;
@@ -744,6 +921,9 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#14171c"; ctx.fillRect(0, 0, w, h);
     if (st.tab === "3d") draw3d(w, h); else draw2d(w, h);
+    const phase = st.play ? (st.arrows ? "arrows" : "sweep") : "paused";
+    $("tbadge").innerHTML = `t = ${st.t >= 0 ? "+" : "&minus;"}${Math.abs(st.t).toFixed(2)}` +
+      ` <span class="dim">· ${phase}${st.arrows && st.arrowNote ? " · " + st.arrowNote : ""}</span>`;
   }
 
   // ---------- controls ----------
@@ -755,17 +935,31 @@
   }
   $("tab3d").onclick = () => setTab("3d");
   $("tab2d").onclick = () => setTab("2d");
-  $("t").oninput = e => { st.t = +e.target.value; st.osc = false;
-    $("osc").setAttribute("aria-pressed", "false");
-    $("tval").textContent = "t=" + st.t.toFixed(2); draw(); };
-  $("osc").onclick = () => { st.osc = !st.osc;
-    $("osc").setAttribute("aria-pressed", String(st.osc)); };
-  $("reset").onclick = () => { st.t = 0; st.osc = false; $("t").value = 0;
-    $("osc").setAttribute("aria-pressed", "false");
-    $("tval").textContent = "t=0.00"; draw(); };
-  const stopOsc = () => { if (st.osc) { st.osc = false;
-    $("osc").setAttribute("aria-pressed", "false"); } };
-  $("amp").oninput = e => { st.amp = +e.target.value; stopOsc();
+  // GIF-style loop: sweep t=-3 -> +3, hold the end frame with arrows, brief rest at
+  // the start, repeat. Paused: show the chosen still (start, end, or end + arrows).
+  const SWEEP = 2600, HOLD = 2200, REST = 400, CYCLE = SWEEP + HOLD + REST;
+  let clock0 = performance.now();
+  function applyPaused() {
+    st.t = st.pauseView === "start" ? -3 : 3;
+    st.arrows = st.pauseView === "arrows";
+  }
+  function syncPlayUI() {
+    $("play").textContent = st.play ? "Pause" : "Play";
+    $("play").setAttribute("aria-pressed", String(st.play));
+    for (const bt of $("pauseview").children)
+      bt.setAttribute("aria-pressed", String(bt.dataset.view === st.pauseView));
+    $("tval").innerHTML = "t=" + (st.t >= 0 ? "+" : "&minus;") + Math.abs(st.t).toFixed(2);
+  }
+  $("play").onclick = () => {
+    st.play = !st.play;
+    if (st.play) clock0 = performance.now(); else applyPaused();
+    syncPlayUI(); draw();
+  };
+  for (const bt of $("pauseview").children) bt.onclick = () => {
+    st.pauseView = bt.dataset.view; st.play = false; applyPaused();
+    syncPlayUI(); draw();
+  };
+  $("amp").oninput = e => { st.amp = +e.target.value;
     $("ampval").innerHTML = "&times;" + st.amp; draw(); };
   $("dimctx").onchange = e => { st.dimctx = e.target.checked; draw(); };
   $("heat").onchange = e => { st.heat = e.target.checked;
@@ -854,8 +1048,6 @@
   let dragp = null;
   canvas.addEventListener("pointerdown", e => {
     canvas.setPointerCapture(e.pointerId);
-    if (st.osc) { st.osc = false;  // touching the canvas stops the auto-sweep
-      $("osc").setAttribute("aria-pressed", "false"); }
     if (st.tab === "2d") {
       if (onBoxCorner(e)) { dragp = "resize"; resizeBoxTo(e); return; }
       dragp = "box"; moveBoxTo(e); return;
@@ -953,17 +1145,175 @@
   }, { passive: false });
   new ResizeObserver(draw).observe(canvas);
 
-  build(); draw();  // must run before the first tick — tick draws when oscillating
+  if (!st.play) applyPaused();
+  build(); draw();  // must run before the first tick — tick draws while playing
 
   let last = performance.now();
   (function tick(now) {
     const dt = (now - last) / 1000; last = now;
     let moving = false;
     if (st.tab === "3d" && st.spin) { st.yaw += dt * 0.35; moving = true; }
-    if (st.osc) { st.t = 3 * Math.sin(now / 900); $("t").value = st.t;
-      $("tval").textContent = "t=" + st.t.toFixed(2); moving = true; }
+    if (st.play && canvas.clientWidth > 0) {  // skip while the toy tab hides it
+      const ph = (now - clock0) % CYCLE;
+      st.t = ph < SWEEP ? -3 * Math.cos(Math.PI * ph / SWEEP) : ph < SWEEP + HOLD ? 3 : -3;
+      st.arrows = ph >= SWEEP && ph < SWEEP + HOLD;
+      $("tval").innerHTML = "t=" + (st.t >= 0 ? "+" : "&minus;") + Math.abs(st.t).toFixed(2);
+      moving = true;
+    }
     if (moving) draw();
     requestAnimationFrame(tick);
   })(last);
+})();
+</script>
+
+<script>
+var REAL_DIGIT_3 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,115,202,254,255,209,66,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,160,231,132,28,84,220,159,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,10,254,39,0,0,0,120,233,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,7,229,18,0,0,0,29,254,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,41,8,0,0,0,29,254,95,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,36,254,95,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,123,254,63,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,143,197,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,38,235,114,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,186,254,205,189,174,56,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,246,223,188,189,198,254,226,12,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,27,15,0,0,5,31,149,208,53,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,123,241,31,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,207,137,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,121,248,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,37,254,9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,19,254,9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,97,254,9,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,212,135,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,29,159,247,47,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+var REAL_DIGIT_8 = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12,96,96,96,155,253,173,72,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12,154,220,180,161,161,181,236,236,91,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,48,110,0,0,0,0,0,127,251,251,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,16,225,251,40,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,80,240,251,59,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,128,253,193,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,8,131,191,190,190,51,12,12,52,221,251,94,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32,126,126,220,251,251,173,174,251,251,219,47,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,43,188,204,251,253,251,251,50,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,162,251,253,251,251,129,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32,253,253,253,159,170,253,253,95,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,92,197,251,184,62,0,8,157,251,94,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,253,251,188,15,0,0,0,127,251,173,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,139,253,223,15,0,0,0,0,127,251,113,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,158,253,121,0,0,0,0,20,205,251,94,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,24,194,255,63,0,0,0,36,115,253,229,59,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,16,181,253,82,0,20,20,214,251,235,66,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,158,253,236,127,205,205,253,251,126,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,119,253,251,251,251,251,229,69,15,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,95,94,173,211,94,59,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+(function(){
+  var N = 28, DIM = N*N;
+  var A = REAL_DIGIT_3.map(function(v){ return v/255; });
+  var B = REAL_DIGIT_8.map(function(v){ return v/255; });
+  function sqDist(u,w){ var s=0; for(var i=0;i<u.length;i++){ var d=u[i]-w[i]; s+=d*d; } return s; }
+  var Dab = sqDist(A,B);
+  var axis = B.map(function(bi,i){ return bi - A[i]; });
+  var axisNorm = Math.sqrt(sqDist(axis, axis.map(function(){return 0;})));
+  var axisUnit = axis.map(function(v){ return v/axisNorm; });
+  var sigmaMin = Math.sqrt(Dab)/5, sigmaMax = Math.sqrt(Dab)/1.6;
+  function sigmaFromSlider(s){ return sigmaMin + (s/100)*(sigmaMax-sigmaMin); }
+  function lerp(a,b,t){ return a.map(function(ai,i){ return ai*(1-t)+b[i]*t; }); }
+  function clamp(x,lo,hi){ return Math.max(lo,Math.min(hi,x)); }
+  function denoise(y, sigma){
+    var dA = sqDist(y,A), dB = sqDist(y,B);
+    var z = clamp((dB-dA)/(2*sigma*sigma), -40, 40);
+    var wA = 1/(1+Math.exp(-z));
+    var wB = 1-wA;
+    return { img: A.map(function(ai,i){ return wA*ai + wB*B[i]; }), wA:wA, wB:wB };
+  }
+  function jvp(y, v, sigma, c){
+    var yp = y.map(function(yi,i){ return yi + c*v[i]; });
+    var ym = y.map(function(yi,i){ return yi - c*v[i]; });
+    var Dp = denoise(yp,sigma).img, Dm = denoise(ym,sigma).img;
+    return Dp.map(function(dpi,i){ return (dpi - Dm[i])/(2*c); });
+  }
+  function norm(v){ return Math.sqrt(v.reduce(function(s,x){ return s+x*x; },0)); }
+  function normalize(v){ var n=norm(v)||1e-9; return v.map(function(x){ return x/n; }); }
+  function dot(u,w){ var s=0; for(var i=0;i<u.length;i++) s+=u[i]*w[i]; return s; }
+  function buildGrid(id){
+    var el = document.getElementById(id);
+    el.style.gridTemplateColumns = 'repeat('+N+', 1fr)';
+    var cells = [];
+    for(var i=0;i<DIM;i++){ var c = document.createElement('div'); el.appendChild(c); cells.push(c); }
+    return cells;
+  }
+  var cellsA = buildGrid('pg-A'), cellsB = buildGrid('pg-B'), cellsY = buildGrid('pg-y'),
+      cellsD = buildGrid('pg-D'), cellsV = buildGrid('pg-v');
+  function paintGray(cells, img){
+    img.forEach(function(v,i){
+      var g = Math.round(clamp(v,0,1)*255);
+      cells[i].style.background = 'rgb('+g+','+g+','+g+')';
+    });
+  }
+  function paintDiverging(cells, v){
+    var m = Math.max.apply(null, v.map(Math.abs)) || 1e-9;
+    var blue = getComputedStyle(document.documentElement).getPropertyValue('--blue').trim() || '#3987e5';
+    var coral = getComputedStyle(document.documentElement).getPropertyValue('--coral').trim() || '#ff8a7a';
+    var panel2 = getComputedStyle(document.documentElement).getPropertyValue('--panel-2').trim() || '#232a35';
+    v.forEach(function(x,i){
+      var t = clamp(x/m, -1, 1);
+      var color = t >= 0 ? coral : blue;
+      var alpha = Math.abs(t);
+      cells[i].style.background = 'color-mix(in srgb, '+color+' '+(alpha*100).toFixed(0)+'%, '+panel2+')';
+    });
+  }
+  paintGray(cellsA, A);
+  paintGray(cellsB, B);
+  var state2 = { t:0.5, sigmaSlider:35, v:null, iter:0 };
+  function seedV(){
+    var v = new Array(DIM);
+    for(var i=0;i<DIM;i++) v[i] = Math.sin(i*1.7+0.3)+0.001*i;
+    state2.v = normalize(v);
+    state2.iter = 0;
+  }
+  seedV();
+  var elIter=document.getElementById('td-iter'), elCos=document.getElementById('td-cos'),
+      elLambda=document.getElementById('td-lambda'), elRatio=document.getElementById('td-ratio'),
+      elLblT=document.getElementById('lbl-t'), elLblSigma=document.getElementById('lbl-sigma'),
+      elConfA=document.getElementById('conf-a'), elConfB=document.getElementById('conf-b'),
+      elCallout=document.getElementById('td-callout');
+  function render2(){
+    var sigma = sigmaFromSlider(state2.sigmaSlider);
+    var y = lerp(A,B,state2.t);
+    var res = denoise(y, sigma);
+    paintGray(cellsY, y);
+    paintGray(cellsD, res.img);
+    var vDisp = dot(state2.v, axisUnit) < 0 ? state2.v.map(function(x){return -x;}) : state2.v;
+    paintDiverging(cellsV, vDisp);
+    elLblT.textContent = state2.t.toFixed(2);
+    elLblSigma.textContent = sigma.toFixed(2);
+    elConfA.style.width = (res.wA*100)+'%';
+    elConfB.style.width = (res.wB*100)+'%';
+    elConfA.textContent = res.wA>0.12 ? '3 '+Math.round(res.wA*100)+'%' : '';
+    elConfB.textContent = res.wB>0.12 ? '8 '+Math.round(res.wB*100)+'%' : '';
+    var cosv = Math.abs(dot(state2.v, axisUnit));
+    elIter.textContent = state2.iter;
+    elCos.textContent = cosv.toFixed(3);
+    if(state2.iter===0){
+      elLambda.textContent = '\u2014'; elRatio.textContent = '\u2014';
+    } else {
+      var Jv = jvp(y, state2.v, sigma, 0.05);
+      var lambda = sigma*sigma*dot(state2.v, Jv);
+      elLambda.textContent = lambda.toFixed(4);
+      var ratio = lambda/(sigma*sigma);
+      elRatio.textContent = ratio.toFixed(2)+'\u00d7';
+    }
+    if(cosv > 0.999 && state2.iter>0){
+      elCallout.innerHTML = '<b>Converged in '+state2.iter+' step'+(state2.iter>1?'s':'')+'.</b> Because there are only two possible clean images, the Jacobian has exactly one non-zero direction \u2014 power iteration cannot help but find it immediately.';
+    } else if(Math.abs(state2.t-0.5) < 0.03){
+      elCallout.innerHTML = 'The scan sits almost exactly between the two digits \u2014 the denoiser is maximally unsure (see the 50/50 bar above). Press <b>Step</b>: one iteration is enough to find the uncertain direction exactly.';
+    } else {
+      elCallout.innerHTML = 'Press <b>Step</b> to run one power-iteration update: <code>v \u2190 normalize(J\u00b7v)</code>, computed via the same finite-difference trick as the real pipelines on the other two tabs.';
+    }
+  }
+  document.getElementById('sl-t').addEventListener('input', function(e){ state2.t = parseFloat(e.target.value); seedV(); render2(); });
+  document.getElementById('sl-sigma').addEventListener('input', function(e){ state2.sigmaSlider = parseFloat(e.target.value); seedV(); render2(); });
+  document.getElementById('td-step').addEventListener('click', function(){
+    var sigma = sigmaFromSlider(state2.sigmaSlider);
+    var y = lerp(A,B,state2.t);
+    var Jv = jvp(y, state2.v, sigma, 0.05);
+    if(norm(Jv) < 1e-9){
+      elCallout.innerHTML = 'D(y) is essentially flat here \u2014 this scan is far from the decision boundary, so there is no local uncertainty to find. Drag <b>t</b> back toward 0.50.';
+      return;
+    }
+    state2.v = normalize(Jv);
+    state2.iter++;
+    render2();
+  });
+  document.getElementById('td-reset').addEventListener('click', function(){ seedV(); render2(); });
+  var playing2=false, playHandle2=null;
+  document.getElementById('td-play').addEventListener('click', function(){
+    playing2 = !playing2;
+    this.textContent = playing2 ? 'Stop' : 'Auto-play';
+    function tick(){ if(!playing2) return; document.getElementById('td-step').click(); playHandle2 = setTimeout(tick, 500); }
+    if(playing2) tick(); else clearTimeout(playHandle2);
+  });
+  render2();
+
+  var mainEl = document.querySelector('.main');
+  var panelEl = document.getElementById('toypanel');
+  var tab3d = document.getElementById('tab3d'), tab2d = document.getElementById('tab2d'), tab3 = document.getElementById('tab3');
+  tab3.addEventListener('click', function(){
+    tab3d.setAttribute('aria-pressed','false');
+    tab2d.setAttribute('aria-pressed','false');
+    tab3.setAttribute('aria-pressed','true');
+    mainEl.classList.add('hidden');
+    panelEl.classList.remove('hidden');
+  });
+  [tab3d, tab2d].forEach(function(btn){
+    btn.addEventListener('click', function(){
+      tab3.setAttribute('aria-pressed','false');
+      mainEl.classList.remove('hidden');
+      panelEl.classList.add('hidden');
+    });
+  });
 })();
 </script>
