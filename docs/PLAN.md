@@ -171,6 +171,9 @@ displacement fields with rigid motion removed.
       t=−3→+3, then the end frame with arrows for ~2 s — plus a paused view toggle
       (Start / End / Arrows). 3D arrows are exact point displacements; 2D arrows are
       Lucas–Kanade flow estimates. `scripts/viewer_template.html` synced to the live page
+- [x] Explorer 3D tab: all 50 shapes (10 per category) with whole-shape and smooth modes
+      at σ 0.01/0.02/0.05 (2026-09-28, `scripts/export_viewer_shapes.py`); the 5 shapes
+      with region-mask runs keep them (◆)
 - [ ] Write-up / figures — figures and `results/README.md` are ready; the course
       report text itself lives outside this repo
 

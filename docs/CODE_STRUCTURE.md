@@ -52,6 +52,7 @@ Every script: `python scripts/<name>.py --config configs/{local,gpu}.yaml [--ove
 | `archive_metrics.py` | Copies `outputs/*/*/metrics.json` into git-tracked `results/metrics/` (never over a newer archive) |
 | `build_results.py` | Regenerates `results/README.md` + figures from current-pipeline sources |
 | `export_viewer_data.py` + `viewer_template.html` | Data bundle and template for the interactive Uncertainty Mode Explorer |
+| `export_viewer_shapes.py` | Explorer data for every `run_experiment` shape (whole-shape + smooth modes): an index embedded as `SHAPES50` plus one `shapes50_<σ>.json` per σ, published beside the page and fetched on demand |
 
 ## Reference implementation crib sheet
 

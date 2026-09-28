@@ -15,6 +15,20 @@ Entry template:
 
 ---
 
+## 2026-09-28 — Explorer: all 50 shapes in the 3D tab
+**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**What:** The 3D tab only had the 5 shapes with region-mask runs (one per category).
+Added every shape of the 2026-09-24 n=50 run: category chips + object chips (10 each,
+◆ = also has region masks), and "whole shape" / "smooth" next to the r0–r5 region chips.
+Data from `scripts/export_viewer_shapes.py`: a small index embedded in the page and one
+file per σ (2.3–4.6 MB, int16 clouds, int8 modes) fetched when that σ is first opened.
+Runs rejected by the symmetry gate have no modes; the readout lists them per object
+(e.g. chair_0895: σ=0.02 whole and smooth, σ=0.05 smooth). Also fixed a v12 bug: the
+mask-size slider still called the removed `stopOsc()`.
+**Result:** explorer version 13; 206 runs with modes, 94 rejected, over 50 shapes x 3 σ.
+
+---
+
 ## 2026-09-27 — Explorer: GIF-style loop with arrows replaces the t-slider
 **Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
 **What:** The team picked how the explorer shows a mode's change (options were compared

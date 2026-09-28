@@ -120,9 +120,10 @@
   </header>
   <div class="main">
     <aside>
-      <div id="g-shape"><p class="group-label">Shape</p><div class="chips" id="shapes"></div></div>
+      <div id="g-shape"><p class="group-label">Shape &middot; object (&#9670; has region masks)</p><div class="chips" id="shapes"></div>
+        <div class="chips" id="objects" style="margin-top:8px"></div></div>
       <div id="g-sigma"><p class="group-label">Noise level &sigma;</p><div class="chips" id="sigmas"></div></div>
-      <div id="g-region"><p class="group-label">Region (move the mask)</p><div class="chips" id="regions"></div></div>
+      <div id="g-region"><p class="group-label">Modes: region mask &middot; whole shape &middot; smooth</p><div class="chips" id="regions"></div></div>
       <div id="g-method"><p class="group-label">Estimator</p><div class="chips" id="methods"></div></div>
       <div id="g-free" class="hidden">
         <p class="group-label">Your mask — drag it in the view</p>
@@ -229,13 +230,56 @@
     </div>
   </div>
 </div>
-<script>const DATA3D=/*__DATA3D__*/;const DATA2D=/*__DATA2D__*/;const DATAFREE=/*__DATAFREE__*/;</script>
+<script>const DATA3D=/*__DATA3D__*/;const DATA2D=/*__DATA2D__*/;const SHAPES50=/*__SHAPES50__*/;const DATAFREE=/*__DATAFREE__*/;</script>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
   const canvas = $("c"), ctx = canvas.getContext("2d");
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const runs3 = DATA3D.runs, clouds = DATA3D.clouds;
+  // All 50 run_experiment shapes (2026-09-24, current pipeline): whole-shape and smooth
+  // modes. The index is embedded; clouds and modes load per sigma when first opened.
+  const ALLPTS = {};
+  const allIdx = n => ALLPTS[n] || (ALLPTS[n] = Array.from({ length: n }, (_, i) => i));
+  for (const e of SHAPES50) {
+    if (!e.eigvals) continue;  // rejected by the symmetry gate: noted in the readout
+    const ev = e.eigvals;
+    runs3.push({ tag: `${e.shape}_sigma${e.sigma}`, shape: e.shape, sigma: e.sigma,
+      region: e.region, cloud: "s50|" + e.cloud, method: "frozen", eigvals: ev,
+      psd_ok: e.psd_ok, conv_ok: e.conv_ok, trustworthy: e.trustworthy,
+      basis_dimension: e.basis_dimension, lazy: true, modes: null,
+      spread: ev[0] > 0 ? (ev[0] - ev[ev.length - 1]) / ev[0] : 0,
+      get mask_idx() { return allIdx(e.n); } });
+  }
+  const LOADED = {};
+  function ensureSigma(sigma) {  // true once that sigma's clouds and modes are in
+    if (LOADED[sigma] === true) return true;
+    if (LOADED[sigma]) return false;  // loading, or failed
+    LOADED[sigma] = "loading";
+    fetch(`shapes50_${sigma}.json`).then(res => {
+      if (!res.ok) throw new Error(res.status);
+      return res.json();
+    }).then(d => {
+      for (const [k, c] of Object.entries(d.clouds)) {
+        const raw = atob(c.b64), x = new Float32Array(raw.length / 2);
+        for (let i = 0; i < x.length; i++)
+          x[i] = ((raw.charCodeAt(2 * i) | (raw.charCodeAt(2 * i + 1) << 8)) << 16 >> 16) / 32767 * c.scale;
+        clouds["s50|" + k] = x;
+      }
+      for (const r of runs3) {
+        if (!r.lazy || r.sigma !== sigma) continue;
+        const ms = d.modes[`${r.cloud.slice(4)}|${r.region}`] || [];
+        r.modes = ms.map(m => {
+          const raw = atob(m.b64), v = new Float32Array(raw.length);
+          for (let i = 0; i < v.length; i++) v[i] = (raw.charCodeAt(i) << 24 >> 24) / 127 * m.scale;
+          return v;
+        });
+      }
+      LOADED[sigma] = true; build(); draw();
+    }).catch(() => { LOADED[sigma] = "failed"; build(); draw(); });
+    return false;
+  }
+  const regionOrder = r => typeof r.region === "number" ? r.region : r.region === "whole" ? 100 : 101;
   const imgs2 = DATA2D.images || [];
 
   // per-image lazy caches: decoded modes, base pixels, per-pixel sigma map
@@ -481,13 +525,14 @@
   $("amp").value = st.amp; $("ampval").innerHTML = "&times;" + st.amp;
   syncPlayUI();
 
-  const shapes = [...new Set(runs3.map(r => r.shape))];
+  const shapes = [...new Set(runs3.map(r => r.shape))].sort();
+  const hasRegions = s => runs3.some(r => r.shape === s && typeof r.region === "number");
   const sigmasFor = s => [...new Set(runs3.filter(r => r.shape === s).map(r => r.sigma))].sort((a, b) => a - b);
   const methodsFor = (s, g) => [...new Set(runs3.filter(r => r.shape === s && r.sigma === g)
                                     .map(r => r.method || "frozen"))].sort();
   const regionsFor = (s, g, me) => runs3.filter(r => r.shape === s && r.sigma === g
                                     && (r.method || "frozen") === me)
-                                    .sort((a, b) => a.region - b.region);
+                                    .sort((a, b) => regionOrder(a) - regionOrder(b));
   const run3 = () => runs3.find(r => r.shape === st.shape && r.sigma === st.sigma
                                      && (r.method || "frozen") === st.method
                                      && r.region === st.region);
@@ -503,6 +548,20 @@
     }));
   }
 
+  function rejNote() {  // this object's runs the symmetry gate rejected, at any sigma
+    const by = {};
+    for (const e of SHAPES50) if (e.shape === st.shape && !e.eigvals)
+      (by[e.sigma] = by[e.sigma] || []).push(e.region === "whole" ? "whole" : "smooth");
+    const parts = Object.entries(by).sort((a, b) => a[0] - b[0])
+      .map(([g, k]) => `σ=${g} (${k.join(", ")})`);
+    return parts.length ? `<br>⚠ rejected by the symmetry gate:<br>&nbsp;&nbsp;${parts.join("<br>&nbsp;&nbsp;")}` : "";
+  }
+  function lazyNote(r) {
+    return (LOADED[r.sigma] === "failed" ? `<br><b style="color:var(--coral)">couldn't load this σ's modes</b>`
+            : LOADED[r.sigma] !== true ? `<br>loading modes…` : "") +
+      (r.trustworthy === false ? `<br>⚠ not trustworthy (convergence / Ritz residual)` : "") +
+      `<br><br>Measured: 2026-09-24 run, 50 shapes,<br>current pipeline (outputs/smooth;<br>results/README.md §1, §5).`;
+  }
   function build() {
     const is3d = st.tab === "3d";
     ["g-shape", "g-sigma", "g-region", "g-method", "g-toggles"].forEach(
@@ -511,7 +570,8 @@
     $("hint").classList.toggle("hidden", !is3d && !imgs2.length);
     let r;
     if (is3d) {
-      if (!sigmasFor(st.shape).includes(st.sigma)) st.sigma = sigmasFor(st.shape)[0];
+      if (!sigmasFor(st.shape).includes(st.sigma))
+        st.sigma = sigmasFor(st.shape).includes(0.02) ? 0.02 : sigmasFor(st.shape)[0];
       const meths = methodsFor(st.shape, st.sigma);
       if (!meths.includes(st.method)) st.method = meths.includes("frozen") ? "frozen" : meths[0];
       const regs = regionsFor(st.shape, st.sigma, st.method);
@@ -519,7 +579,14 @@
       if (st.region === "free" ? !hasFree
           : !regs.some(x => x.region === st.region))
         st.region = regs.length ? regs[0].region : (hasFree ? "free" : null);
-      chips($("shapes"), shapes, v => v.replace(/_/g, " "),
+      const cat = st.shape.split("_")[0];
+      chips($("shapes"), [...new Set(shapes.map(x => x.split("_")[0]))], v => v,
+            v => v === cat, v => {
+              const objs = shapes.filter(x => x.startsWith(v + "_"));
+              st.shape = objs.find(hasRegions) || objs[0];
+              st.painted.clear(); st.freeRun = null; });
+      chips($("objects"), shapes.filter(x => x.startsWith(cat + "_")),
+            v => v.split("_")[1] + (hasRegions(v) ? " &#9670;" : ""),
             v => v === st.shape, v => { st.shape = v; st.painted.clear(); st.freeRun = null; });
       chips($("sigmas"), sigmasFor(st.shape), v => "σ = " + v,
             v => v === st.sigma, v => { st.sigma = v; });
@@ -530,6 +597,8 @@
       if (hasFree) regItems.push("free");
       chips($("regions"), regItems,
             v => v === "free" ? "✏ custom"
+              : typeof v.region === "string"
+              ? (v.region === "whole" ? "whole shape" : "smooth") + (v.psd_ok && v.conv_ok !== false ? "" : " ⚠")
               : `r${v.region}<span style="color:${(st.region!=="free"&&v.region===st.region)?'#eaf2ff':'var(--muted)'};font-size:11px"> ·${v.mask_idx.length}p${(v.psd_ok && v.conv_ok !== false) ? "" : " ⚠"}</span>`,
             v => v === "free" ? st.region === "free"
               : (st.region !== "free" && v.region === st.region),
@@ -551,7 +620,10 @@
                            sigma: st.sigma, mask_idx: [...st.painted], spread: 0,
                            psd_ok: true })
         : run3();
-      $("legend").innerHTML = `<i style="background:var(--coral)"></i>mask (selected region)` +
+      if (r && r.lazy) ensureSigma(r.sigma);
+      $("legend").innerHTML = (r && typeof r.region === "string"
+        ? `<i style="background:var(--coral)"></i>${r.region === "whole" ? "whole shape" : "smooth deformation"} (all points)`
+        : `<i style="background:var(--coral)"></i>mask (selected region)`) +
         `<i style="background:#747f94"></i>rest of shape<i style="background:rgba(255,138,122,.3)"></i>ghost t=0`;
       $("hint").textContent = st.region !== "free" ? "drag to rotate · scroll to zoom"
         : st.painting ? "drag to paint points · ✋ Move to drag the region · both off to rotate"
@@ -632,11 +704,15 @@
       $("conf").classList.add("hidden");
     }
     const prov = is3d
-      ? `run <b>${r.tag}</b><br>mask <b>${r.mask_idx.length}</b> pts · spread <b>${Math.round(r.spread * 100)}%</b>` + sure + freeNote +
+      ? `run <b>${r.tag}</b><br>` + (typeof r.region === "string"
+          ? (r.region === "whole" ? `<b>whole shape</b> · ${r.mask_idx.length} pts`
+                                  : `<b>smooth, rigid motion removed</b> · ${r.basis_dimension}-dim basis`)
+            + ` · top-5 spread <b>${(r.spread * 100).toFixed(1)}%</b>`
+          : `mask <b>${r.mask_idx.length}</b> pts · spread <b>${Math.round(r.spread * 100)}%</b>`) + sure + freeNote +
         (r.psd_ok ? "" : `<br>⚠ smallest eigval &lt; 0 (non-PSD)`) +
         (r.conv_ok === false ? `<br>⚠ subspace iteration did not converge` : "") +
-        naiveWarn +
-        `<br><br>Measured: ModelNet40 shape, frozen<br>Noise2Score3D, subspace iteration<br>(outputs/masked-grid*).`
+        naiveWarn + rejNote() + (r.lazy ? lazyNote(r) :
+        `<br><br>Measured: ModelNet40 shape, frozen<br>Noise2Score3D, subspace iteration<br>(outputs/masked-grid*).`)
       : `run <b>${r.tag}</b><br>σ = <b>${r.sigma}</b>` +
         (r.eigvals.length ? ` · λ₀/σ² = <b>${(r.eigvals[0] / (r.sigma * r.sigma)).toFixed(1)}</b>` : "") + sure +
         (imgs2.length ? `<br><b>rank-${imgs2[st.img].k} reconstruction</b> for the box mask` : "") +
@@ -668,6 +744,13 @@
       r = run3();
       if (!r) return;
       base = clouds[r.cloud];
+      if (!base) {  // lazy shape: its sigma's data is still loading
+        ensureSigma(r.sigma);
+        ctx.fillStyle = "#8a93a6"; ctx.font = "13px IBM Plex Sans, sans-serif";
+        ctx.fillText(LOADED[r.sigma] === "failed" ? "couldn't load this shape's data"
+                                                  : "loading shape…", 20, h / 2);
+        return;
+      }
     }
     const n = base.length / 3;
     const inR = new Int32Array(n).fill(-1);
@@ -1062,7 +1145,7 @@
     if (st.region === "free") { const f = freeFor(); if (!f) return tip.classList.add("hidden");
       base = f.x_hat; r = st.freeRun; }
     else { r = run3(); if (!r) return tip.classList.add("hidden");
-      base = clouds[r.cloud]; }
+      base = clouds[r.cloud]; if (!base) return tip.classList.add("hidden"); }
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
     const proj = proj3(rect.width, rect.height);
@@ -1128,7 +1211,7 @@
     st.freeRun = computeFreeModes();
     if (!st.freeRun) return;  // needs >= 8 painted points
     st.mode = 0; build(); draw(); };
-  $("brush").oninput = e => { st.brush = +e.target.value; stopOsc();
+  $("brush").oninput = e => { st.brush = +e.target.value;
     if (isMoving() && st.maskCenter != null) {  // live-resize the region
       applyRegionAt(st.maskCenter); build(); draw();
     }
