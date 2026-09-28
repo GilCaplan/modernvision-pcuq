@@ -16,7 +16,7 @@ Entry template:
 ---
 
 ## 2026-09-28 — Explorer: all 50 shapes in the 3D tab
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**Who:** Rocky · **Machine:** mac · **Config:** —
 **What:** The 3D tab only had the 5 shapes with region-mask runs (one per category).
 Added every shape of the 2026-09-24 n=50 run: category chips + object chips (10 each,
 ◆ = also has region masks), and "whole shape" / "smooth" next to the r0–r5 region chips.
@@ -30,7 +30,7 @@ mask-size slider still called the removed `stopOsc()`.
 ---
 
 ## 2026-09-27 — Explorer: GIF-style loop with arrows replaces the t-slider
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**Who:** Rocky · **Machine:** mac · **Config:** —
 **What:** The team picked how the explorer shows a mode's change (options were compared
 on the "Mode Display Picker" artifact). Both the 3D and 2D tabs now loop: sweep
 t = −3 → +3 (2.6 s, eased), hold the t = +3 frame with arrows (2.2 s), rest at the start
@@ -46,7 +46,7 @@ t=+3 frames inside the box, cached per image/mode/gain/box.
 regenerated from the live page (it predated the toy tab).
 
 ## 2026-09-24 — Smooth deformation modes merged, gated and run at full scale; depth-map re-tally
-**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** configs/gpu.yaml
+**Who:** Rocky · **Machine:** mac (CPU) · **Config:** configs/gpu.yaml
 (`--override name=smooth device=cpu`); depth2d: configs/local.yaml (`name=depth2d-retally`)
 **What:** Merged Yakov's smooth-deformation modes (`spectrum.smooth_eigenpairs`,
 docs/SMOOTH_MODES.md) with Galit's `numerics-fixes-and-validation` branch, then
@@ -108,7 +108,7 @@ mode's change (slider, loop, flicker, filmstrip, change map, arrows, overlay; 2D
 depth-map normalization, `ffhq.pt` provenance, 2D-vs-3D comparison.
 
 ## 2026-09-16 — Closing the region-mode gap: fresh validated exemplars, and a surprising negative result on direction stability
-**Who:** Claude (with Galit) · **Machine:** windows (CPU, ~45 min total) · **Config:**
+**Who:** Galit · **Machine:** windows (CPU, ~45 min total) · **Config:**
 configs/gpu.yaml (`--override device=cpu data.n_shapes=15 data.sigmas=[0.02]`)
 **What:** Closed the gap flagged in the "ready to submit?" discussion — the 6 region-
 mode exemplar figures in `results/README.md` §4 predated every pipeline fix this
@@ -164,7 +164,7 @@ investigate whether ANY operator modification (larger regions? different masking
 achieves cross-seed direction stability, since neither tested approach does.
 
 ## 2026-09-16 — Task 9 second half: whole-shape mode DIRECTIONS are noise artifacts; magnitude is not
-**Who:** Claude (with Galit) · **Machine:** windows (CPU, ~15 min) · **Config:**
+**Who:** Galit · **Machine:** windows (CPU, ~15 min) · **Config:**
 configs/gpu.yaml (`--override device=cpu`), new script `scripts/audit_seed_stability.py`
 **What:** The deferred half of task 9 — stability under a second noise seed, and
 agreement under point resampling — for the 15 shapes that were `trustworthy` at
@@ -222,7 +222,7 @@ modes reference run first, then the stability audit on top of it — a bigger li
 than "a small finish").
 
 ## 2026-09-16 — Tasks 7 & 8 & half of 9: reframed the report, made reproducibility real, added a composite trustworthy flag
-**Who:** Claude (with Galit) · **Machine:** windows (CPU) · **Config:** n/a (docs +
+**Who:** Galit · **Machine:** windows (CPU) · **Config:** n/a (docs +
 tooling, plus re-running `build_results.py`/`archive_metrics.py` against the n=50
 run above)
 **What — task 7 (stop calling it calibration):** `results/README.md` §1 literally
@@ -284,7 +284,7 @@ run's exact weights.
 **Next (explicitly deferred, per instruction):** task 9's second half — stability
 under a second noise seed, agreement under point resampling — needs new compute
 (~another full sweep), not just aggregation over what's already measured.
-**Who:** Claude (with Galit) · **Machine:** windows (CPU, resumed from the n=15 run
+**Who:** Galit · **Machine:** windows (CPU, resumed from the n=15 run
 below, ~80 more min) · **Config:** configs/gpu.yaml (`--override device=cpu`, all 50
 shapes, 5 categories, sigma in {0.01, 0.02, 0.05}) — the full historical sample size.
 **What:** Resumed the n=15 run below to the full 150 (shape, sigma) pairs (50 shapes
@@ -331,7 +331,7 @@ eigenvalue for that sigma without this context would be misleading either direct
 PLAN.md's depth2d re-tally and the sigma=0.03 breakdown-boundary run remain open.
 
 ## 2026-09-16 — Full-scale confirmation run (15 shapes x 3 sigma, topology-frozen default): matches Phase 3 in-distribution, sharpens the out-of-range finding
-**Who:** Claude (with Galit) · **Machine:** windows (CPU, ~28 min wall time) · **Config:**
+**Who:** Galit · **Machine:** windows (CPU, ~28 min wall time) · **Config:**
 configs/gpu.yaml (`--override device=cpu data.n_shapes=15`) — real settings otherwise
 (5 categories round-robin, sigma in {0.01, 0.02, 0.05}, n_ev=5, iters=15,
 `graph_freeze_variant: topology`, the new default from the graph-freezing audit above).
@@ -387,7 +387,7 @@ number (it likely should be — it's a materially different picture from "conver
 0.999, antisym 0.001" read in isolation).
 
 ## 2026-09-16 — run_experiment.py/run_masked_modes.py would have crashed on the first full-scale run
-**Who:** Claude (with Galit) · **Machine:** windows (CPU) · **Config:** configs/gpu.yaml
+**Who:** Galit · **Machine:** windows (CPU) · **Config:** configs/gpu.yaml
 (`--override data.n_shapes=2 data.sigmas=[0.02] device=cpu`, calibrating timing before
 a full run)
 **What:** While timing a full-scale run to answer "how do I run the full pipeline,"
@@ -407,7 +407,7 @@ n_ev=5/iters=15 settings). `pytest tests/` — 30 passed, no regression.
 **Next:** none — this was blocking, now fixed. Full-scale run instructions below.
 
 ## 2026-09-16 — depth2d benchmark aligned with tasks 2-4; found a sharper failure mode
-**Who:** Claude (with Galit) · **Machine:** windows (CPU) · **Config:** configs/local.yaml
+**Who:** Galit · **Machine:** windows (CPU) · **Config:** configs/local.yaml
 (depth2d.dataset.n_shapes overridden to 4, then 10, for smoke checks)
 **What:** Brought `scripts/run_depth2d.py` (the 2026-09-11 depth-map side quest) in
 line with this session's spectrum/diagnostics changes: (1) wired
@@ -452,7 +452,7 @@ category would make a clean addition to the category-breakdown table already pla
 in PLAN.md's depth2d side quest section.
 
 ## 2026-09-16 — Graph-freezing audit: a weaker "topology only" freeze beats the current default on real shapes
-**Who:** Claude (with Galit) · **Machine:** windows (CPU, no GPU needed) · **Config:**
+**Who:** Galit · **Machine:** windows (CPU, no GPU needed) · **Config:**
 configs/local.yaml (+ overrides, see below)
 **What:** Task-6-style audit of `Noise2Score3DWrapper.graph_frozen()` as a deliberate
 finite-difference surrogate, not automatically "the derivative of the model." First,
@@ -525,7 +525,7 @@ today's per-shape timings, no GPU required. Also open: task 1 (reframe the proje
 and task 7 (stop treating the arbitrary-sigma sweep as calibration evidence).
 
 ## 2026-09-16 — Second toy prior: Gaussian mixture gives legitimate eigenvalues above sigma^2
-**Who:** Claude · **Machine:** windows · **Config:** configs/local.yaml
+**Who:** Galit · **Machine:** windows · **Config:** configs/local.yaml
 **What:** `AnalyticGaussianDenoiser`'s ground truth (Cov[X|Y] = sigma^2 C(C+sigma^2 I)^-1)
 always has eigenvalues <= sigma^2 for a single Gaussian prior — a limitation of the
 toy, not a general property of posterior covariances, and worth correcting before it
@@ -560,7 +560,7 @@ difference surrogate, comparing regular vs. frozen-pyramid vs. fixed-topology fi
 differences on the real Noise2Score3D model.
 
 ## 2026-09-16 — Denoisers/artifacts tagged with an explicit covariance_kind taxonomy
-**Who:** Claude · **Machine:** windows · **Config:** configs/local.yaml
+**Who:** Galit · **Machine:** windows · **Config:** configs/local.yaml
 **What:** sigma^2 * J is only the exact posterior covariance when D is verifiably the
 MMSE denoiser for a known prior at exactly that sigma; nothing in the code previously
 stopped a figure or summary from treating every Jacobian spectrum that way. Added a
@@ -591,7 +591,7 @@ posterior, which would be the first `exact_mmse_fixed_sigma` case with legitimat
 eigenvalues above sigma^2 and a non-Gaussian ground truth.
 
 ## 2026-09-16 — Convergence diagnostics: principal angles + Ritz residuals added alongside existing overlap history
-**Who:** Claude · **Machine:** windows · **Config:** configs/local.yaml
+**Who:** Galit · **Machine:** windows · **Config:** configs/local.yaml
 **What:** Continuation of the Rayleigh--Ritz fix below. Per-vector overlap alone is
 unreliable when the top subspace rotates internally or eigenvalues are close, so
 `top_eigenpairs(..., return_diagnostics=True)` now also reports, without removing the
@@ -630,7 +630,7 @@ are absent from PATH), so no test result is recorded yet.
 **Next:** Run `python -m pytest tests/ -q` locally before any real-model or GPU work.
 
 ## 2026-09-11 — Depth-map 2D benchmark: scaffolded, smoke-tested, first (striking) result
-**Who:** Claude (with Galit) · **Machine:** windows (fresh checkout, CPU) · **Config:**
+**Who:** Galit · **Machine:** windows (fresh checkout, CPU) · **Config:**
 configs/local.yaml (depth2d block)
 **What:** New side quest: render ModelNet40 shapes to depth-map images and run them
 through the reference paper's OWN 2D denoiser (MNIST CNN / FFHQ DDPM, already vendored
@@ -669,7 +669,7 @@ render knobs to see if a "nicer" depth map changes the picture; decide whether t
 for a natural-image comparison point.
 
 ## 2026-09-11 — Depth-map benchmark scaled up (15 shapes, 5 categories): breakdown is systematic, and it's PSD-violation, not asymmetry
-**Who:** Claude (with Galit) · **Machine:** windows (CPU) · **Config:** configs/local.yaml
+**Who:** Galit · **Machine:** windows (CPU) · **Config:** configs/local.yaml
 (depth2d: n_shapes 2→15, categories chair→[chair,airplane,table,lamp,guitar] mirroring
 gpu.yaml's set; also fixed `spectrum.iters` 8→25 — `run_fullspectrum2d.py` needed 40
 iters for this same MNIST CNN, 8 was copied from the unrelated FFHQ example and
@@ -701,7 +701,7 @@ story).
 decide whether `ffhq.pt` is worth chasing for a natural-image comparison point.
 
 ## 2026-09-11 — Depth-map benchmark: scaled to 50 shapes + render-choice robustness check
-**Who:** Claude (with Galit) · **Machine:** windows (CPU) · **Config:** configs/local.yaml
+**Who:** Galit · **Machine:** windows (CPU) · **Config:** configs/local.yaml
 (depth2d.dataset.n_shapes 15→50, matching gpu.yaml's shape count; 99s wall time, still
 local/CPU) + two `--override` robustness variants (`depth2d.render.axis=0`,
 `depth2d.render.dilate=0`), each also 50 shapes, ~100s.
@@ -734,7 +734,7 @@ don't quote a single number without naming which render config it came from.
 severity range for report figures; `ffhq.pt` chase remains optional/deferred.
 
 ## 2026-09-04 — Aggregate metrics archived into results/metrics/ (outputs/ was empty)
-**Who:** Claude · **Machine:** mac · **Config:** — (no experiment run)
+**Who:** Rocky · **Machine:** mac · **Config:** — (no experiment run)
 **What:** `outputs/` is gone (disposable scratch, as designed) along with `data/` and
 `external/`, so every number not already in `results/` would have cost a ~4.5GB
 re-download plus hours of recompute — which silently blocked the remaining Phase-4
@@ -767,7 +767,7 @@ log-concavity/MNIST correction into results/README.md and the published page; re
 gallery exemplars on concentration as well as spread; resolve the lamp spread above.
 
 ## 2026-08-18 — Viewer finalized: 9 images, draggable/resizable masks everywhere, review-agent audit
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** run_fullspectrum2d.py
+**Who:** Rocky · **Machine:** mac · **Config:** run_fullspectrum2d.py
 **What:** Iterated the viewer to its final form based on user feedback: (a) 2D tab is
 one chip per image — 5 MNIST digits *selected for recognizability* (min ‖x̂−x‖ per
 class over 400 test digits: labels 0/3/5/7/8) + 4 faces (213/227/34/514), each with a
@@ -785,7 +785,7 @@ click-sweep test now gates every publish. Fixed along the way: viewer init crash
 **Next:** the report.
 
 ## 2026-08-18 — Paint-your-own masks in the viewer (rank-24 client-side eigensolver)
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** run_fullspectrum.py
+**Who:** Rocky · **Machine:** mac · **Config:** run_fullspectrum.py
 **What:** Free-form mask selection without server compute: precompute the top-24
 whole-shape eigenpairs per shape (`scripts/run_fullspectrum.py`, chair/lamp/airplane
 @ σ=0.03, int16-quantized in `results/viewer_data_free.json`); for any painted mask M
@@ -797,7 +797,7 @@ labeled "rank-24 reconstruction" with a pointer to the exact-modes script.
 **Next:** report writing.
 
 ## 2026-08-18 — Faces fixed with exact gradients; corrections to two earlier claims
-**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** run_images2d + bp
+**Who:** Rocky · **Machine:** mac (CPU) · **Config:** run_images2d + bp
 **What:** User reported the face tab showed no visible change. Root-caused and fixed.
 **Diagnosis chain:** (1) viewer rendering verified correct (replayed its exact math in
 Node); (2) face modes were computed with float32 central differences — noisy, and
@@ -823,7 +823,7 @@ clean) is now the honest multimodality evidence.
 modes, display gain applies to images too.
 
 ## 2026-08-18 — Two-domain comparison: original method reproduced (MNIST + DDPM faces); viewer v2
-**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** scripts + overrides
+**Who:** Rocky · **Machine:** mac (CPU) · **Config:** scripts + overrides
 **What:** Ran the reference paper's own domain through OUR pipeline (`denoisers2d.py`,
 `run_images2d.py`; `spectrum` masks generalized to image shapes): their bundled MNIST
 CNN and their DDPM FFHQ denoiser (ffhq.pt, 2.2GB, from ddpm-segmentation). Also ran
@@ -847,7 +847,7 @@ the naive-port baseline on the 6-region mask grid, and rebuilt the interactive v
 **Next:** report writing; fold the log-concavity correction into results/README.
 
 ## 2026-08-18 — Comprehensive evidence set complete; results/ folder built
-**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
+**Who:** Rocky · **Machine:** mac (CPU) · **Config:** local + overrides
 **What:** Three background runs to make the report evidence comprehensive, plus a
 curated, git-tracked `results/` folder (`scripts/build_results.py` regenerates it:
 summary charts, auto-picked exemplar galleries, README with computed tables).
@@ -869,7 +869,7 @@ itself (report text, figure selection from results/, discussion of the 1.3–1.9
 calibration drift and the training-range boundary).
 
 ## 2026-08-17 — Phase-3 sweep complete: calibrated in-distribution, breaks beyond training σ
-**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
+**Who:** Rocky · **Machine:** mac (CPU) · **Config:** local + overrides
 (name=phase3: 50 shapes × σ∈{0.01,0.02,0.05} × 5 eigenpairs, 15 iters, frozen graph)
 **What:** Full-scale sweep, 150 runs in ~75 min, `outputs/phase3/run_experiment/`.
 **Result (per σ, medians over 50 shapes):**
@@ -892,7 +892,7 @@ frozen-graph A/B, mode galleries. Optional: rerun σ=0.05 → 0.03 (inside train
 range) to show the breakdown boundary; unfrozen ablation slice for the A/B table.
 
 ## 2026-08-17 — MPS measured: works, but slower than CPU for the real model
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**Who:** Rocky · **Machine:** mac · **Config:** —
 **What:** Tested whether the real denoiser can use Apple's GPU (MPS) instead of CPU.
 Required generalizing the `.cuda()` shim from "no-op" to "redirect to the wrapper's
 device" (also fixed a shim bug: second wrapper construction crashed on the spec-less
@@ -907,7 +907,7 @@ dense matmuls do win.
 **Next:** —
 
 ## 2026-08-17 — First real ModelNet results; graph-rebuild discontinuity found & fixed
-**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** local + overrides
+**Who:** Rocky · **Machine:** mac (CPU) · **Config:** local + overrides
 **What:** Ran the first real experiment locally (ModelNet40 downloaded in ~2 min):
 10 shapes (chair/airplane/table/lamp/guitar ×2) × σ∈{0.01,0.02,0.05} × 5 eigenpairs,
 ~10s per run, `outputs/local/run_experiment/`. Results were bad in an instructive way:
@@ -929,7 +929,7 @@ bound — see PLAN.md open questions.
 via `scripts/summarize_results.py`, mode-figure gallery for the report.
 
 ## 2026-08-17 — GPU-ready: ModelNet40 loader, full run_experiment pipeline, VM runbook
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** configs/local.yaml
+**Who:** Rocky · **Machine:** mac · **Config:** configs/local.yaml
 **What:** Closed the gaps between "gates pass" and "VM can run the real experiment":
 ModelNet40 loader (official zip, pure-torch OFF parse + area-weighted sampling —
 dropped the trimesh dep), fully implemented `run_experiment.py` (shapes × σ, spectrum,
@@ -946,7 +946,7 @@ an open question to re-check on in-distribution ModelNet shapes.
 ModelNet40 (~2GB). Expect ~10s/(shape·σ) on CPU-scale timing — much less on GPU.
 
 ## 2026-08-17 — Phase 2 (nearly) done: real denoiser runs ON THE MAC; equivariance gate passed
-**Who:** Claude (with Rocky) · **Machine:** mac (CPU) · **Config:** configs/local.yaml
+**Who:** Rocky · **Machine:** mac (CPU) · **Config:** configs/local.yaml
 **What:** Wrote `Noise2Score3DWrapper` + `scripts/check_denoiser.py`. Made the vendored
 model run without CUDA/pykeops via runtime shims (no vendored files edited): no-op
 `.cuda()` when CUDA is absent; swap their pykeops kNN for exact `cdist`+`topk`; their
@@ -963,7 +963,7 @@ eigenvalues ~1.5σ² exceed the MMSE bound σ². Sanity gate re-verified at N=20
 **Next:** ModelNet40 loading (last open Phase-2 item), then Phase-3 sweeps on the VM.
 
 ## 2026-08-17 — Noise2Score3D availability confirmed; Phase-2 blocker cleared
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**Who:** Rocky · **Machine:** mac · **Config:** —
 **What:** Verified the primary denoiser exists publicly: official ICCV 2025 code at
 github.com/Bobby645/Noise2Score3D with pretrained weights on Hugging Face
 (bobby645/Noise2Score3D). Vendored at `external/Noise2Score3D/` (commit `fef67d7`).
@@ -976,7 +976,7 @@ documented in SOURCES.md.
 ordering-preservation gate before trusting any spectra.
 
 ## 2026-08-17 — Phase 1 complete: toy pipeline validated, gate passes
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** configs/local.yaml
+**Who:** Rocky · **Machine:** mac · **Config:** configs/local.yaml
 **What:** Implemented the full Phase-1 machinery: `ToyGaussian` prior with closed-form
 posterior, `AnalyticGaussianDenoiser`, JVPs (forward/central/autograd), subspace
 iteration with Rayleigh-quotient eigenvalues, and the diagnostics suite. 7 tests pass.
@@ -990,7 +990,7 @@ float32 cancellation floor to matter and double precision (CPU/CUDA only — MPS
 float64) to be needed for small c. Phase 2: verify Noise2Score3D availability.
 
 ## 2026-08-17 — Project scaffolded
-**Who:** Claude (with Rocky) · **Machine:** mac · **Config:** —
+**Who:** Rocky · **Machine:** mac · **Config:** —
 **What:** Created the docs system, package skeleton, and scale-profile configs. Vendored
 `GaussianDenoisingPosterior` (shallow clone) into `external/`.
 **Result:** Structure as described in [CODE_STRUCTURE.md](CODE_STRUCTURE.md). Read of

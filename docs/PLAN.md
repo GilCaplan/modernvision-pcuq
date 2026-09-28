@@ -161,7 +161,7 @@ displacement fields with rigid motion removed.
 - [x] `viz.py`: eigenmode displacement fields on point clouds (± amounts along mode,
       like the reference repo's image sliders, but as 3D arrows / animated offsets) —
       `plot_mode_arrows`, `plot_mode_sweep`, plus the interactive Uncertainty Mode
-      Explorer (claude.ai artifact; template in `scripts/viewer_template.html`)
+      Explorer (hosted web page; template in `scripts/viewer_template.html`)
 - [x] Quantitative tables: eigenvalue spectra vs σ; validation-gate results —
       `results/README.md` §1–5, `results/metrics/`
 - [x] Failure cases + discussion (where the linearization breaks) — σ=0.05 breakdown,
