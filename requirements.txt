@@ -7,3 +7,6 @@ pyyaml
 tqdm
 matplotlib
 pytest
+# only for the 2D reference-method scripts (run_images2d.py, run_fullspectrum2d.py)
+pillow
+torchvision
